@@ -3,63 +3,92 @@ package it.ds1;
 import akka.actor.AbstractActor;
 import akka.actor.ActorRef;
 import akka.actor.Props;
-import akka.actor.ReceiveTimeout;
-import java.time.Duration;
+
+import java.io.Serializable;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
+// Coordinator class that handles updates and manages the replicas
 public class Coordinator extends AbstractActor {
-    private static final int QUORUM_SIZE = 2;
-    private final Map<EpochSequencePair, Set<ActorRef>> pendingAcks = new HashMap<>();
-    private int currentEpoch = 0;
-    private int sequenceNumber = 0;
 
-    public static Props props() {
-        return Props.create(Coordinator.class);
+    private int epoch = 0; // Current epoch
+    private int sequenceNumber = 0; // Current sequence number
+    private final Set<ActorRef> replicas; // Set of replicas in the system
+    private final Map<EpochSequencePair, Set<ActorRef>> pendingAcks; // Track pending ACKs
+
+    // Constructor to initialize the set of replicas
+    public Coordinator(Set<ActorRef> replicas) {
+        this.replicas = replicas;
+        this.pendingAcks = new HashMap<>();
     }
 
+    // Factory method to create a Coordinator actor
+    public static Props props(Set<ActorRef> replicas) {
+        return Props.create(Coordinator.class, replicas);
+    }
+
+    // Message classes for communication between actors
+    public static class WriteRequest implements Serializable {
+        public final ActorRef client;
+        public final int newValue;
+
+        public WriteRequest(ActorRef client, int newValue) {
+            this.client = client;
+            this.newValue = newValue;
+        }
+    }
+
+    public static class ReadResponse implements Serializable {
+        public final int value;
+
+        public ReadResponse(int value) {
+            this.value = value;
+        }
+    }
+
+    public static class WriteOk implements Serializable {
+        public final EpochSequencePair epochSequencePair;
+
+        public WriteOk(EpochSequencePair epochSequencePair) {
+            this.epochSequencePair = epochSequencePair;
+        }
+    }
+
+    // Method to handle incoming messages
     @Override
     public Receive createReceive() {
         return receiveBuilder()
-                .match(Replica.UpdateRequest.class, this::onUpdateRequest)
-                .match(Replica.WriteOkMessage.class, this::onWriteOkMessage)
-                .match(ReceiveTimeout.class, this::onReceiveTimeout)
+                .match(WriteRequest.class, this::onWriteRequest)
+                .match(Replica.Ack.class, this::onAck)
                 .build();
     }
 
-    private void onUpdateRequest(Replica.UpdateRequest msg) {
+    // Handle write requests from replicas
+    private void onWriteRequest(WriteRequest request) {
+        System.out.println("Coordinator received write request from Replica with value: " + request.newValue);
         sequenceNumber++;
-        EpochSequencePair pair = new EpochSequencePair(currentEpoch, sequenceNumber);
-        System.out.println("Coordinator received update request from client " + msg.client + " with new value " + msg.newValue + " for pair " + pair);
-        Replica.UpdateMessage updateMessage = new Replica.UpdateMessage(pair, msg.newValue);
-        Set<ActorRef> acks = new HashSet<>();
-        pendingAcks.put(pair, acks);
-        for (ActorRef replica : getContext().getChildren()) {
-            replica.tell(updateMessage, getSelf());
+        EpochSequencePair pair = new EpochSequencePair(epoch, sequenceNumber);
+        pendingAcks.put(pair, new HashSet<>(replicas));
+        for (ActorRef replica : replicas) {
+            replica.tell(new Replica.Update(pair, request.newValue), getSelf());
         }
-        getContext().setReceiveTimeout(Duration.ofSeconds(5));
     }
 
-    private void onWriteOkMessage(Replica.WriteOkMessage msg) {
-        System.out.println("Coordinator received WriteOk message from replica " + getSender() + " for " + msg.pair);
-        Set<ActorRef> acks = pendingAcks.get(msg.pair);
+    // Handle ACK messages from replicas
+    private void onAck(Replica.Ack ack) {
+        System.out.println("Coordinator received ACK for: " + ack.epochSequencePair);
+        Set<ActorRef> acks = pendingAcks.get(ack.epochSequencePair);
         if (acks != null) {
-            acks.add(getSender());
-            if (acks.size() >= QUORUM_SIZE) {
-                System.out.println("Quorum reached for " + msg.pair);
-                for (ActorRef replica : getContext().getChildren()) {
-                    replica.tell(msg, getSelf());
+            acks.remove(getSender());
+            if (acks.size() <= replicas.size() / 2) { // Check if a quorum is reached
+                for (ActorRef replica : replicas) {
+                    replica.tell(new WriteOk(ack.epochSequencePair), getSelf());
                 }
-                pendingAcks.remove(msg.pair);
-                getContext().setReceiveTimeout(Duration.ofSeconds(5));
+                pendingAcks.remove(ack.epochSequencePair); // Remove the entry as it's now completed
             }
         }
     }
-
-    private void onReceiveTimeout(ReceiveTimeout timeout) {
-        System.out.println("Coordinator timeout while waiting for acks.");
-        // Handle timeout for receiving acks (e.g., retry or fail the update)
-    }
 }
+

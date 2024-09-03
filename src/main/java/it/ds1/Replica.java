@@ -2,87 +2,105 @@ package it.ds1;
 
 import akka.actor.AbstractActor;
 import akka.actor.ActorRef;
+import akka.actor.Cancellable;
 import akka.actor.Props;
+import scala.concurrent.duration.Duration;
 
+import java.io.Serializable;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
+// Replica class representing each node in the system
 public class Replica extends AbstractActor {
-    private int value = 0; // initial value
-    private final Map<EpochSequencePair, Integer> updateHistory = new HashMap<>();
-    private final ActorRef coordinator;
 
-    public static class ReadRequest {
+    private final String replicaID; // Unique ID for each replica
+    private int value = 0; // Local value stored by the replica
+    private final ActorRef coordinator; // Reference to the coordinator actor
+    private final Map<EpochSequencePair, Integer> updateHistory; // History of updates
+
+    // Constructor to initialize replicaID, coordinator, and update history
+    public Replica(String replicaID, ActorRef coordinator) {
+        this.replicaID = replicaID;
+        this.coordinator = coordinator;
+        this.updateHistory = new HashMap<>();
+    }
+
+    // Factory method to create a Replica actor
+    public static Props props(String replicaID, ActorRef coordinator) {
+        return Props.create(Replica.class, () -> new Replica(replicaID, coordinator));
+    }
+
+    // Message classes for communication between actors
+    public static class ReadRequest implements Serializable {
         public final ActorRef client;
+
         public ReadRequest(ActorRef client) {
             this.client = client;
         }
     }
 
-    public static class UpdateRequest {
+    public static class WriteRequest implements Serializable {
         public final ActorRef client;
         public final int newValue;
-        public UpdateRequest(ActorRef client, int newValue) {
+
+        public WriteRequest(ActorRef client, int newValue) {
             this.client = client;
             this.newValue = newValue;
         }
     }
 
-    public static class UpdateMessage {
-        public final EpochSequencePair pair;
+    public static class Update implements Serializable {
+        public final EpochSequencePair epochSequencePair;
         public final int newValue;
-        public UpdateMessage(EpochSequencePair pair, int newValue) {
-            this.pair = pair;
+
+        public Update(EpochSequencePair epochSequencePair, int newValue) {
+            this.epochSequencePair = epochSequencePair;
             this.newValue = newValue;
         }
     }
 
-    public static class WriteOkMessage {
-        public final EpochSequencePair pair;
-        public WriteOkMessage(EpochSequencePair pair) {
-            this.pair = pair;
+    public static class Ack implements Serializable {
+        public final EpochSequencePair epochSequencePair;
+
+        public Ack(EpochSequencePair epochSequencePair) {
+            this.epochSequencePair = epochSequencePair;
         }
     }
 
-    public static Props props(ActorRef coordinator) {
-        return Props.create(Replica.class, () -> new Replica(coordinator));
-    }
-
-    public Replica(ActorRef coordinator) {
-        this.coordinator = coordinator;
-    }
-
+    // Method to handle incoming messages
     @Override
     public Receive createReceive() {
         return receiveBuilder()
                 .match(ReadRequest.class, this::onReadRequest)
-                .match(UpdateRequest.class, this::onUpdateRequest)
-                .match(UpdateMessage.class, this::onUpdateMessage)
-                .match(WriteOkMessage.class, this::onWriteOkMessage)
+                .match(WriteRequest.class, this::onWriteRequest)
+                .match(Update.class, this::onUpdate)
+                .match(Ack.class, this::onAck)
                 .build();
     }
 
-    private void onReadRequest(ReadRequest msg) {
-        System.out.println("Client " + msg.client + " read req to " + getSelf());
-        msg.client.tell(value, getSelf());
+    // Handle read requests from clients
+    private void onReadRequest(ReadRequest request) {
+        System.out.println("Replica " + replicaID + " received read request from Client.");
+        request.client.tell(new Coordinator.ReadResponse(value), getSelf());
     }
 
-    private void onUpdateRequest(UpdateRequest msg) {
-        System.out.println("Client " + msg.client + " update req with new value " + msg.newValue);
-        // Forward the request to the Coordinator
-        coordinator.tell(msg, getSelf());
+    // Handle write requests from clients and forward them to the coordinator
+    private void onWriteRequest(WriteRequest request) {
+        System.out.println("Replica " + replicaID + " received write request from Client with value: " + request.newValue);
+        coordinator.tell(new Coordinator.WriteRequest(getSelf(), request.newValue), getSelf());
     }
 
-    private void onUpdateMessage(UpdateMessage msg) {
-        System.out.println("Received update message " + msg.pair);
-        updateHistory.put(msg.pair, msg.newValue);
-        getSender().tell(new WriteOkMessage(msg.pair), getSelf());
-        System.out.println("Sent WriteOk message to the coordinator" + msg.pair);
+    // Handle update messages from the coordinator
+    private void onUpdate(Update update) {
+        System.out.println("Replica " + replicaID + " received update: " + update.epochSequencePair + " with value: " + update.newValue);
+        updateHistory.put(update.epochSequencePair, update.newValue);
+        value = update.newValue; // Apply the update
+        coordinator.tell(new Ack(update.epochSequencePair), getSelf()); // Send an acknowledgment back to the coordinator
     }
 
-    private void onWriteOkMessage(WriteOkMessage msg) {
-        System.out.println("Received WriteOk message " + msg.pair);
-        value = updateHistory.get(msg.pair);
-        System.out.println("Replica " + getSelf() + " update " + msg.pair.getEpoch() + ":" + msg.pair.getSequenceNumber() + " " + value);
+    // Handle ACK messages from the coordinator
+    private void onAck(Ack ack) {
+        System.out.println("Replica " + replicaID + " received ACK for: " + ack.epochSequencePair);
     }
 }
