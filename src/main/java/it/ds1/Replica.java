@@ -77,6 +77,7 @@ public class Replica extends AbstractActor {
         System.out.println("Received update message " + msg.pair);
         updateHistory.put(msg.pair, msg.newValue);
         getSender().tell(new WriteOkMessage(msg.pair), getSelf());
+        System.out.println("Sent WriteOk message to the coordinator" + msg.pair);
     }
 
     private void onWriteOkMessage(WriteOkMessage msg) {

@@ -20,6 +20,7 @@ public class Main {
         replica2.tell(new Replica.UpdateRequest(coordinator, 20), ActorRef.noSender());
         replica1.tell(new Replica.UpdateRequest(coordinator, 30), ActorRef.noSender());
         replica2.tell(new Replica.UpdateRequest(coordinator, 40), ActorRef.noSender());
+        
 
         try {
             System.out.println(">>> Press ENTER to exit <<<");
