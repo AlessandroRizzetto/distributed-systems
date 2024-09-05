@@ -1,48 +1,28 @@
 package it.ds1;
-import java.io.Serializable;
-import java.util.Objects;
-
-// Class to represent an Epoch-Sequence pair
-public class EpochSequencePair implements Serializable {
+public class EpochSequencePair {
     private final int epoch;
-    private final int sequenceNumber;
+    private final int seqNum;
 
-    // Constructor to initialize the epoch and sequence number
-    public EpochSequencePair(int epoch, int sequenceNumber) {
+    public EpochSequencePair(int epoch, int seqNum) {
         this.epoch = epoch;
-        this.sequenceNumber = sequenceNumber;
+        this.seqNum = seqNum;
     }
 
-    // Getters for the epoch and sequence number
-    public int getEpoch() {
-        return epoch;
-    }
-
-    public int getSequenceNumber() {
-        return sequenceNumber;
-    }
-
-    // Overriding equals method for comparing two EpochSequencePair objects
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        EpochSequencePair that = (EpochSequencePair) o;
-        return epoch == that.epoch && sequenceNumber == that.sequenceNumber;
-    }
-
-    // Overriding hashCode method for hashing EpochSequencePair objects
-    @Override
-    public int hashCode() {
-        return Objects.hash(epoch, sequenceNumber);
-    }
-
-    // Overriding toString method for easy printing of EpochSequencePair objects
     @Override
     public String toString() {
-        return "EpochSequencePair{" +
-                "epoch=" + epoch +
-                ", sequenceNumber=" + sequenceNumber +
-                '}';
+        return epoch + ":" + seqNum;
+    }
+
+    @Override
+    public int hashCode() {
+        return epoch * 31 + seqNum;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) return true;
+        if (obj == null || getClass() != obj.getClass()) return false;
+        EpochSequencePair that = (EpochSequencePair) obj;
+        return epoch == that.epoch && seqNum == that.seqNum;
     }
 }
