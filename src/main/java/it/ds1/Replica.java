@@ -1,13 +1,11 @@
 package it.ds1;
-
 import akka.actor.AbstractActor;
 import akka.actor.ActorRef;
-import akka.actor.ReceiveTimeout;
-import akka.io.Tcp.Write;
-import java.time.Duration;
-
+import scala.concurrent.duration.Duration;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
+import akka.actor.Cancellable;
 
 public class Replica extends AbstractActor {
     private int id;
@@ -15,12 +13,13 @@ public class Replica extends AbstractActor {
     private EpochSequencePair lastUpdate;
     private ActorRef coordinator;
     private Map<EpochSequencePair, Integer> history = new HashMap<>();
-    private final long TIMEOUT_DURATION = 10;
+    private Cancellable heartbeatTimer;
 
     public Replica(int id, ActorRef coordinator) {
         this.id = id;
         this.coordinator = coordinator;
         this.coordinator.tell(new Register(id), getSelf());
+        resetHeartbeatTimer();
     }
 
     @Override
@@ -30,12 +29,32 @@ public class Replica extends AbstractActor {
                 .match(Update.class, this::onUpdate)
                 .match(WriteOk.class, this::onWriteOk)
                 .match(Write.class, this::onWrite)
-                .match(ReceiveTimeout.class, r -> {
-                    // il coordinatore e' crashato!
-                    // da qui bisognerebbe partire con l'algoritmo di election
-                    this.cancelTimeout();
-                })
+                .match(Heartbeat.class, this::onHeartbeat)
+                .match(Timeout.class, this::onTimeout)
                 .build();
+    }
+
+    private void resetHeartbeatTimer() {
+        if (heartbeatTimer != null) {
+            heartbeatTimer.cancel();
+        }
+        heartbeatTimer = getContext().system().scheduler().scheduleOnce(
+            Duration.create(10, TimeUnit.SECONDS),
+            getSelf(),
+            new Timeout(),
+            getContext().dispatcher(),
+            getSelf()
+        );
+    }
+
+    private void onTimeout(Timeout timeout) {
+        Main.customPrint("Timeout detected at Replica " + id + ": Coordinator crash suspected");
+        // Potential code to initiate leader election or further error handling
+    }
+
+    private void onHeartbeat(Heartbeat heartbeat) {
+        Main.customPrint("Heartbeat received at Replica " + id);
+        resetHeartbeatTimer();
     }
 
     private void onReadRequest(Client.ReadRequest msg) {
@@ -44,18 +63,15 @@ public class Replica extends AbstractActor {
     }
 
     private void onUpdate(Update msg) {
-        this.cancelTimeout(); // ho ricevuto UPDATE dal coordinatore, quindi posso continuare
         if (!history.containsKey(msg.updateId)) {
             Main.customPrint("Replica " + id + " received update: " + msg.updateId + " with value " + msg.newValue);
             lastUpdate = msg.updateId;
             history.put(msg.updateId, msg.newValue);
             getSender().tell(new Ack(getSelf()), getSelf());
-            getContext().setReceiveTimeout(Duration.ofSeconds(this.TIMEOUT_DURATION)); // attendo WRITEOK
         }
     }
 
     private void onWriteOk(WriteOk msg) {
-        this.cancelTimeout(); // ho ricevuto WRITEOK
         Main.customPrint("Replica " + id + " applying update.");
         if (history.containsKey(lastUpdate) && localValue != history.get(lastUpdate)) {
             localValue = history.get(lastUpdate);
@@ -65,13 +81,9 @@ public class Replica extends AbstractActor {
 
     private void onWrite(Write msg) {
         Main.customPrint("Replica " + id + " received write request with value " + msg.newValue);
-        coordinator.tell(new Client.WriteRequest(getSelf(), msg.newValue), getSelf()); // Inoltra al coordinatore
-        getContext().setReceiveTimeout(Duration.ofSeconds(this.TIMEOUT_DURATION)); // attendo UPDATE
+        coordinator.tell(new Client.WriteRequest(getSelf(), msg.newValue), getSelf());
     }
 
-    private void cancelTimeout() {
-        getContext().cancelReceiveTimeout(); // annulla il timeout
-    }
 
     public static class Write {
         final int newValue;
@@ -87,7 +99,7 @@ public class Replica extends AbstractActor {
 
         public Update(EpochSequencePair updateId, int newValue) {
             this.updateId = updateId;
-            this.newValue = newValue;
+            this.newValue = newValue; 
         }
     }
 
@@ -99,8 +111,7 @@ public class Replica extends AbstractActor {
         }
     }
 
-    public static class WriteOk {
-    }
+    public static class WriteOk { }
 
     public static class Register {
         final int id;
@@ -110,6 +121,6 @@ public class Replica extends AbstractActor {
         }
     }
 
-    public static class Heartbeat {
-    }
+    public static class Timeout {}
+    public static class Heartbeat {}
 }

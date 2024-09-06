@@ -1,0 +1,41 @@
+Quorum size: 3
+Coordinator registered Replica 0
+Coordinator registered Replica 1
+Coordinator registered Replica 2
+Coordinator registered Replica 3
+Coordinator registered Replica 4
+Client write request to Replica 0 with new value: 100
+Replica 0 received write request with value 100
+Coordinator received write request for replica 0=Actor[akka://replica-system/user/replica0#-1122773041] with value: 100
+Replica 2 received update: 0:0 with value 100
+Replica 3 received update: 0:0 with value 100
+Replica 1 received update: 0:0 with value 100
+Replica 0 received update: 0:0 with value 100
+Replica 4 received update: 0:0 with value 100
+Coordinator received ACK from Replica 2=Actor[akka://replica-system/user/replica2#896107739]
+Coordinator received ACK from Replica 3=Actor[akka://replica-system/user/replica3#1996172639]
+Coordinator received ACK from Replica 1=Actor[akka://replica-system/user/replica1#1455774048]
+Quorum reached, broadcasting WRITEOK.
+Coordinator received ACK from Replica 0=Actor[akka://replica-system/user/replica0#-1122773041]
+Replica 4 applying update.
+Replica 3 applying update.
+Replica 1 applying update.
+Replica 2 applying update.
+Replica 0 applying update.
+Replica 2 updated value to 100
+Replica 1 updated value to 100
+Replica 3 updated value to 100
+Replica 4 updated value to 100
+Coordinator received ACK from Replica 4=Actor[akka://replica-system/user/replica4#-98970244]
+Replica 0 updated value to 100
+Coordinator CRASH simulated!!!
+Client read request to Replica 0
+Client read request to Replica 0
+Client read done, value: 100
+Client write request to Replica 0 with new value: 200
+Replica 0 received write request with value 200
+Timeout detected at Replica 0: Coordinator crash suspected
+Timeout detected at Replica 4: Coordinator crash suspected
+Timeout detected at Replica 2: Coordinator crash suspected
+Timeout detected at Replica 1: Coordinator crash suspected
+Timeout detected at Replica 3: Coordinator crash suspected

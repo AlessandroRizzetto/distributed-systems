@@ -6,6 +6,11 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
+import scala.concurrent.duration.Duration;
+
+
+import akka.actor.Cancellable;
 
 public class Coordinator extends AbstractActor {
     private int epoch = 0;
@@ -13,10 +18,26 @@ public class Coordinator extends AbstractActor {
     private final int quorumSize;
     private final Map<Integer, ActorRef> replicas = new HashMap<>();
     private Set<ActorRef> acks = new HashSet<>();
+    private Cancellable heartbeatSchedule;
 
     public Coordinator(int N) {
         this.quorumSize = N / 2 + 1;
         Main.customPrint("Quorum size: " + quorumSize);
+        startHeartbeatSchedule();
+    }
+
+    private void startHeartbeatSchedule() {
+        heartbeatSchedule = getContext().system().scheduler().scheduleAtFixedRate(
+            Duration.Zero(),
+            Duration.create(5, TimeUnit.SECONDS),
+            this::sendHeartbeat,
+            getContext().dispatcher()
+        );
+    }
+
+    private void sendHeartbeat() {
+        replicas.values().forEach(replica -> replica.tell(new Replica.Heartbeat(), getSelf()));
+        // Main.customPrint("Heartbeat sent by Coordinator");
     }
 
     @Override
@@ -25,6 +46,7 @@ public class Coordinator extends AbstractActor {
                 .match(Client.WriteRequest.class, this::onWriteRequest)
                 .match(Replica.Ack.class, this::onAck)
                 .match(Replica.Register.class, this::onRegisterReplica)
+                .match(Crash.class, this::onCrash)
                 .build();
     }
 
@@ -38,8 +60,7 @@ public class Coordinator extends AbstractActor {
         Main.customPrint("Coordinator received write request for replica " + replicas.entrySet().stream()
             .filter(entry -> entry.getValue().equals(msg.targetReplica)).findFirst().orElse(null) + " with value: " + msg.newValue);
         acks.clear();
-    
-        // Broadcast update to all replicas
+
         replicas.values().forEach(replica -> replica.tell(new Replica.Update(updateId, msg.newValue), getSelf()));
     }
 
@@ -48,11 +69,35 @@ public class Coordinator extends AbstractActor {
         Main.customPrint("Coordinator received ACK from Replica " + replicas.entrySet().stream()
             .filter(entry -> entry.getValue().equals(msg.replica)).findFirst().orElse(null));
         if (acks.size() >= quorumSize) {
-            if (!acks.isEmpty()) { // Assicurati che l'invio avvenga una sola volta
+            if (!acks.isEmpty()) {
                 Main.customPrint("Quorum reached, broadcasting WRITEOK.");
                 replicas.values().forEach(replica -> replica.tell(new Replica.WriteOk(), getSelf()));
-                acks.clear(); // Svuota la lista di acks per evitare ripetizioni
+                acks.clear();
             }
+        }
+    }
+
+    private void onCrash(Crash crash) {
+        Main.customPrint("Coordinator CRASH simulated!!!");
+        if (heartbeatSchedule != null) {
+            heartbeatSchedule.cancel();
+            heartbeatSchedule = null; 
+        }
+        getContext().become(crashed());
+    }
+
+    public Receive crashed() {
+        return receiveBuilder()
+                .matchAny(msg -> {})
+                .build();
+    }
+
+    public static class Heartbeat {}
+    public static class Crash {
+        final int duration;
+
+        public Crash(int duration) {
+            this.duration = duration;
         }
     }
 }
