@@ -1,4 +1,5 @@
 package it.ds1;
+
 import akka.actor.ActorRef;
 import akka.actor.ActorSystem;
 import akka.actor.Props;
@@ -19,7 +20,8 @@ public class Main {
     public static void delay(int d) {
         try {
             Thread.sleep(d);
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
     }
 
     private static void saveLogToFile(String fileName) {
@@ -45,6 +47,15 @@ public class Main {
             replicas.add(replica);
         }
 
+        // All replicas should know about each other
+        for (ActorRef replica : replicas) {
+            for (ActorRef replica2 : replicas) {
+                if (!replica.equals(replica2)) {
+                    replica.tell(new Replica.AddReplicaRequest(replica2), ActorRef.noSender());
+                }
+            }
+        }
+
         ActorRef client = system.actorOf(Props.create(Client.class, replicas, coordinator), "client");
         client.tell(new Client.WriteRequest(replicas.get(0), 100), ActorRef.noSender());
         delay(1000);
@@ -56,7 +67,8 @@ public class Main {
         try {
             System.out.println(">>> Press ENTER to exit <<<");
             System.in.read();
-        } catch (IOException ignored) {}
+        } catch (IOException ignored) {
+        }
 
         saveLogToFile("log.txt");
         system.terminate();
