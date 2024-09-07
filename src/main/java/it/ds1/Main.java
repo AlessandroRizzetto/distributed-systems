@@ -41,6 +41,7 @@ public class Main {
         ActorRef coordinator = system.actorOf(Props.create(Coordinator.class, N), "coordinator");
         for (int i = 0; i < N; i++) {
             ActorRef replica = system.actorOf(Props.create(Replica.class, i, coordinator), "replica" + i);
+            replica.tell(new Replica.Register(i), ActorRef.noSender());
             replicas.add(replica);
         }
 

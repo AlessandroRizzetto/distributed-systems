@@ -1,4 +1,5 @@
 package it.ds1;
+
 import akka.actor.ActorRef;
 import akka.actor.AbstractActor;
 
@@ -9,7 +10,6 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import scala.concurrent.duration.Duration;
 
-
 import akka.actor.Cancellable;
 
 public class Coordinator extends AbstractActor {
@@ -19,6 +19,7 @@ public class Coordinator extends AbstractActor {
     private final Map<Integer, ActorRef> replicas = new HashMap<>();
     private Set<ActorRef> acks = new HashSet<>();
     private Cancellable heartbeatSchedule;
+    private boolean isCrashed = false;
 
     public Coordinator(int N) {
         this.quorumSize = N / 2 + 1;
@@ -27,12 +28,13 @@ public class Coordinator extends AbstractActor {
     }
 
     private void startHeartbeatSchedule() {
-        heartbeatSchedule = getContext().system().scheduler().scheduleAtFixedRate(
-            Duration.Zero(),
-            Duration.create(5, TimeUnit.SECONDS),
-            this::sendHeartbeat,
-            getContext().dispatcher()
-        );
+        if (!isCrashed) {
+            heartbeatSchedule = getContext().system().scheduler().scheduleAtFixedRate(
+                    Duration.Zero(),
+                    Duration.create(5, TimeUnit.SECONDS),
+                    this::sendHeartbeat,
+                    getContext().dispatcher());
+        }
     }
 
     private void sendHeartbeat() {
@@ -58,18 +60,26 @@ public class Coordinator extends AbstractActor {
     private void onWriteRequest(Client.WriteRequest msg) {
         EpochSequencePair updateId = new EpochSequencePair(epoch, seqNumber++);
         Main.customPrint("Coordinator received write request for replica " + replicas.entrySet().stream()
-            .filter(entry -> entry.getValue().equals(msg.targetReplica)).findFirst().orElse(null) + " with value: " + msg.newValue);
+                .filter(entry -> entry.getValue().equals(msg.targetReplica)).findFirst().orElse(null) + " with value: "
+                + msg.newValue);
         acks.clear();
 
-        replicas.values().forEach(replica -> replica.tell(new Replica.Update(updateId, msg.newValue), getSelf()));
+        // Simulate a Coordinator crash after receiving the write request from a replica
+        // onCrash(new Crash(0));
+        if (!isCrashed) { 
+            Main.customPrint("the Coordinator is sending update messages");
+            replicas.values().forEach(replica -> replica.tell(new Replica.Update(updateId, msg.newValue), getSelf()));
+        }
     }
 
     private void onAck(Replica.Ack msg) {
         acks.add(msg.replica);
         Main.customPrint("Coordinator received ACK from Replica " + replicas.entrySet().stream()
-            .filter(entry -> entry.getValue().equals(msg.replica)).findFirst().orElse(null));
+                .filter(entry -> entry.getValue().equals(msg.replica)).findFirst().orElse(null));
         if (acks.size() >= quorumSize) {
             if (!acks.isEmpty()) {
+                // Simulate a Coordinator crash by calling the onCrash method
+                // onCrash(new Crash(0));
                 Main.customPrint("Quorum reached, broadcasting WRITEOK.");
                 replicas.values().forEach(replica -> replica.tell(new Replica.WriteOk(), getSelf()));
                 acks.clear();
@@ -79,20 +89,31 @@ public class Coordinator extends AbstractActor {
 
     private void onCrash(Crash crash) {
         Main.customPrint("Coordinator CRASH simulated!!!");
-        if (heartbeatSchedule != null) {
-            heartbeatSchedule.cancel();
-            heartbeatSchedule = null; 
-        }
-        getContext().become(crashed());
+        isCrashed = true;
+        // if (heartbeatSchedule != null) {
+        // heartbeatSchedule.cancel();
+        // heartbeatSchedule = null;
+        // }
     }
 
     public Receive crashed() {
         return receiveBuilder()
-                .matchAny(msg -> {})
+                .matchAny(msg -> {
+                })
                 .build();
     }
 
-    public static class Heartbeat {}
+    // public Receive election() {
+    //     // Da vedere se deve solo igonorare i messaggi in entrata o cos'altro
+    //     return receiveBuilder()
+    //             .matchAny(msg -> {
+    //             })
+    //             .build();
+    // }
+
+    public static class Heartbeat {
+    }
+
     public static class Crash {
         final int duration;
 
