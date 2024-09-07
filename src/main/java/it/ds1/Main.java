@@ -38,7 +38,7 @@ public class Main {
     public static void main(String[] args) {
         final ActorSystem system = ActorSystem.create("replica-system");
         final int N = 5; // Number of replicas
-        List<ActorRef> replicas = new ArrayList<>();
+        ArrayList<ActorRef> replicas = new ArrayList<>();
 
         ActorRef coordinator = system.actorOf(Props.create(Coordinator.class, N), "coordinator");
         for (int i = 0; i < N; i++) {
@@ -49,20 +49,23 @@ public class Main {
 
         // All replicas should know about each other
         for (ActorRef replica : replicas) {
-            for (ActorRef replica2 : replicas) {
-                if (!replica.equals(replica2)) {
-                    replica.tell(new Replica.AddReplicaRequest(replica2), ActorRef.noSender());
-                }
-            }
+            replica.tell(new Replica.AddReplicaRequest(new ArrayList<>(replicas), replica), coordinator);
+        }
+
+        Main.customPrint("Coordinator Replicas");
+        for (ActorRef replica : replicas) {
+            Main.customPrint("Replica " + replica);
         }
 
         ActorRef client = system.actorOf(Props.create(Client.class, replicas, coordinator), "client");
         client.tell(new Client.WriteRequest(replicas.get(0), 100), ActorRef.noSender());
         delay(1000);
-        coordinator.tell(new Coordinator.Crash(0), ActorRef.noSender()); // Simulate coordinator crash
-        client.tell(new Client.ReadRequest(replicas.get(0)), ActorRef.noSender());
-        delay(5000);
-        client.tell(new Client.WriteRequest(replicas.get(0), 200), ActorRef.noSender());
+        // coordinator.tell(new Coordinator.Crash(0), ActorRef.noSender()); // Simulate
+        // coordinator crash
+        // client.tell(new Client.ReadRequest(replicas.get(0)), ActorRef.noSender());
+        // delay(3000);
+        // client.tell(new Client.WriteRequest(replicas.get(0), 200),
+        // ActorRef.noSender());
 
         try {
             System.out.println(">>> Press ENTER to exit <<<");
