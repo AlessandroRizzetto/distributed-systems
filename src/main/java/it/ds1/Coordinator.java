@@ -28,17 +28,16 @@ public class Coordinator extends AbstractActor {
     }
 
     private void startHeartbeatSchedule() {
-        
+
         heartbeatSchedule = getContext().system().scheduler().scheduleAtFixedRate(
                 Duration.Zero(),
                 Duration.create(5, TimeUnit.SECONDS),
                 this::sendHeartbeat,
                 getContext().dispatcher());
-        }
-    
+    }
 
     private void sendHeartbeat() {
-        if (this.isCrashed == 0){
+        if (this.isCrashed == 0) {
             replicas.values().forEach(replica -> replica.tell(new Replica.Heartbeat(), getSelf()));
             Main.customPrint("Heartbeat sent by Coordinator");
         }
@@ -68,7 +67,7 @@ public class Coordinator extends AbstractActor {
 
         // Simulate a Coordinator crash after receiving the write request from a replica
         // onCrash(new Crash(0));
-        if (this.isCrashed == 0) { 
+        if (this.isCrashed == 0) {
             Main.customPrint("the Coordinator is sending update messages");
             replicas.values().forEach(replica -> replica.tell(new Replica.Update(updateId, msg.newValue), getSelf()));
         }
@@ -81,7 +80,7 @@ public class Coordinator extends AbstractActor {
         if (acks.size() >= quorumSize) {
             if (!acks.isEmpty()) {
                 // Simulate a Coordinator crash by calling the onCrash method
-                onCrash(new Crash(0));
+                // onCrash(new Crash(0));
                 if (this.isCrashed == 0) {
                     Main.customPrint("Quorum reached, broadcasting WRITEOK.");
                     replicas.values().forEach(replica -> replica.tell(new Replica.WriteOk(), getSelf()));
@@ -109,11 +108,11 @@ public class Coordinator extends AbstractActor {
     }
 
     // public Receive election() {
-    //     // Da vedere se deve solo igonorare i messaggi in entrata o cos'altro
-    //     return receiveBuilder()
-    //             .matchAny(msg -> {
-    //             })
-    //             .build();
+    // // Da vedere se deve solo igonorare i messaggi in entrata o cos'altro
+    // return receiveBuilder()
+    // .matchAny(msg -> {
+    // })
+    // .build();
     // }
 
     public static class Heartbeat {

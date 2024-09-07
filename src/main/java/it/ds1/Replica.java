@@ -6,6 +6,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import akka.actor.Cancellable;
+import it.ds1.Coordinator.Crash;
 
 public class Replica extends AbstractActor {
     private int id;
@@ -17,11 +18,12 @@ public class Replica extends AbstractActor {
     private Cancellable heartbeatTimer;
     private Cancellable writeOkTimeout;
     private Cancellable writeRequestTimeout;
+    private int isCrashed = 0;
 
     public Replica(int id, ActorRef coordinator) {
         this.id = id;
         this.coordinator = coordinator;
-        this.coordinator.tell(new Register(id), getSelf());
+        this.coordinator.tell(new Register(id), getSelf()); // Registra la replica presso il coordinatore
     }
 
     @Override
@@ -36,6 +38,7 @@ public class Replica extends AbstractActor {
                 .match(WriteOkTimeout.class, this::onWriteOkTimeout)
                 .match(WriteRequestTimeout.class, this::onWriteRequestTimeout)
                 .match(Register.class, this::onRegister)
+                .match(Crash.class, this::onCrash)
                 .build();
     }
 
@@ -152,6 +155,19 @@ public class Replica extends AbstractActor {
         // Potenziale codice per avviare l'elezione o altre azioni
     }
 
+    private void onCrash(Crash crash) {
+        Main.customPrint("Replica " + id + " CRASH simulated!!!");
+        this.isCrashed = 1;
+        getContext().become(crashed());
+    }
+
+    public Receive crashed() {
+        return receiveBuilder()
+                .matchAny(msg -> {
+                })
+                .build();
+    }
+
     // Definizione dei messaggi utilizzati per i timeout
     public static class Write {
         final int newValue;
@@ -198,4 +214,12 @@ public class Replica extends AbstractActor {
     public static class WriteRequestTimeout { }
 
     public static class HeartbeatTimeout { }
+
+    public static class Crash {
+        final int duration;
+
+        public Crash(int duration) {
+            this.duration = duration;
+        }
+    }
 }
