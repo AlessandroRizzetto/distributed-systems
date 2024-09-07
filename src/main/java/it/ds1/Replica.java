@@ -32,18 +32,18 @@ public class Replica extends AbstractActor {
                 .match(WriteOk.class, this::onWriteOk)
                 .match(Write.class, this::onWrite)
                 .match(Heartbeat.class, this::onHeartbeat)
-                .match(Timeout.class, this::onTimeout)
+                .match(HeartbeatTimeout.class, this::onHeartbeatTimeout)
                 .match(WriteOkTimeout.class, this::onWriteOkTimeout)
                 .match(WriteRequestTimeout.class, this::onWriteRequestTimeout)
-                .match(Register.class, this::onRegister)  // Aggiungi il gestore per il messaggio di registrazione
+                .match(Register.class, this::onRegister)
                 .build();
     }
 
-    // Metodo centralizzato per pianificare i timeout (come richiesto dal prof)
+    // Metodo centralizzato per pianificare i timeout
     private Cancellable scheduleTimeout(Cancellable currentTimeout, Object timeoutMessage, int delayInSeconds) {
-        Main.customPrint("Scheduling timeout for " + timeoutMessage.getClass().getSimpleName() + " at Replica " + id);
+        // Main.customPrint("Scheduling timeout for " + timeoutMessage.getClass().getSimpleName() + " at Replica " + id);
         if (currentTimeout != null && !currentTimeout.isCancelled()) {
-            currentTimeout.cancel();
+            currentTimeout.cancel();  // Cancella il timeout precedente se attivo
         }
         return getContext().system().scheduler().scheduleOnce(
             Duration.create(delayInSeconds, TimeUnit.SECONDS),
@@ -55,37 +55,20 @@ public class Replica extends AbstractActor {
     }
 
     private void onRegister(Register msg) {
-        // Main.customPrint("Replica " + id + " registered with Coordinator.");
-        resetHeartbeatTimer();  // Avvia il timer solo dopo che la replica è stata registrata
+        resetHeartbeatTimer();  // Avvia il timer del heartbeat solo dopo la registrazione
     }
 
     // Pianifica il timeout per il messaggio WRITEOK
     private void startWriteOkTimeout() {
-        cancelWriteOkTimeout();  // Cancella il timeout precedente
-        // writeOkTimeout = scheduleTimeout(writeOkTimeout, new WriteOkTimeout(), 5);  // Timeout di 5 secondi per aspettare il WRITEOK
+        writeOkTimeout = scheduleTimeout(writeOkTimeout, new WriteOkTimeout(), 5);  // Timeout di 5 secondi per aspettare il WRITEOK
     }
 
     // Pianifica il timeout per l'inoltro della richiesta di scrittura
     private void startWriteRequestTimeout() {
-        cancelWriteRequestTimeout(); // Cancella il timeout precedente
-        // writeRequestTimeout = scheduleTimeout(writeRequestTimeout, new WriteRequestTimeout(), 5);  // Timeout di 5 secondi per il broadcast
+        writeRequestTimeout = scheduleTimeout(writeRequestTimeout, new WriteRequestTimeout(), 5);  // Timeout di 5 secondi per il broadcast
     }
 
-    // Cancella il timeout per WRITEOK
-    private void cancelWriteOkTimeout() {
-        if (writeOkTimeout != null) {
-            writeOkTimeout.cancel();
-            writeOkTimeout = null;
-        }
-    }
-
-    // Cancella il timeout per la richiesta di scrittura
-    private void cancelWriteRequestTimeout() {
-        if (writeRequestTimeout != null) {
-            writeRequestTimeout.cancel();
-            writeRequestTimeout = null;
-        }
-    }
+    
 
     // Gestisce il messaggio Write
     private void onWrite(Write msg) {
@@ -96,7 +79,8 @@ public class Replica extends AbstractActor {
 
     // Gestisce il messaggio WriteOk
     private void onWriteOk(WriteOk msg) {
-        Main.customPrint("Replica " + id + " applying update.");
+        Main.customPrint("Replica " + id + " received WRITEOK.");
+        cancelWriteOkTimeout();  // Cancella il timeout dopo la ricezione del WRITEOK
 
         if (history.containsKey(lastUpdate) && localValue != history.get(lastUpdate)) {
             localValue = history.get(lastUpdate);
@@ -117,14 +101,9 @@ public class Replica extends AbstractActor {
             lastUpdate = msg.updateId;
             history.put(msg.updateId, msg.newValue);
             getSender().tell(new Ack(getSelf()), getSelf());
+            cancelWriteRequestTimeout(); // Delete the write request timeout
             startWriteOkTimeout();  // Avvia il timeout per aspettare il WRITEOK
         }
-        
-    }
-
-    // Metodo per reimpostare il timer del heartbeat
-    private void resetHeartbeatTimer() {
-        // heartbeatTimer = scheduleTimeout(heartbeatTimer, new Timeout(), 10);  // Timeout di 10 secondi per il messaggio heartbeat
     }
 
     // Gestistione del messaggio Heartbeat
@@ -132,6 +111,28 @@ public class Replica extends AbstractActor {
         Main.customPrint("Heartbeat received at Replica " + id);
         resetHeartbeatTimer();  // Reimposta il timer del heartbeat quando viene ricevuto un heartbeat
     }
+
+    // Metodo per reimpostare il timer del heartbeat
+    private void resetHeartbeatTimer() {
+        heartbeatTimer = scheduleTimeout(heartbeatTimer, new HeartbeatTimeout(), 10);  // Timeout di 10 secondi per il messaggio heartbeat
+    }
+
+    // Gestione della cancellazione dei timeout
+    private void cancelWriteOkTimeout() {
+        if (writeOkTimeout != null) {
+            writeOkTimeout.cancel();  // Cancella il timeout attivo per il WRITEOK
+            writeOkTimeout = null;
+        }
+    }
+
+    private void cancelWriteRequestTimeout() {
+        if (writeRequestTimeout != null) {
+            writeRequestTimeout.cancel();  // Cancella il timeout attivo per la richiesta di scrittura
+            writeRequestTimeout = null;
+        }
+    }
+
+    
 
     // Gestione del timeout quando il coordinatore non invia il WRITEOK
     private void onWriteOkTimeout(WriteOkTimeout msg) {
@@ -146,8 +147,8 @@ public class Replica extends AbstractActor {
     }
 
     // Gestione del timeout generale
-    private void onTimeout(Timeout timeout) {
-        Main.customPrint("Timeout detected at Replica " + id + ": Coordinator crash suspected");
+    private void onHeartbeatTimeout(HeartbeatTimeout timeout) {
+        Main.customPrint("Timeout while waiting for coordinator to broadcast HEARTBEAT request at Replica " + id + ": Coordinator crash suspected");
         // Potenziale codice per avviare l'elezione o altre azioni
     }
 
@@ -195,4 +196,6 @@ public class Replica extends AbstractActor {
     public static class WriteOkTimeout { }
 
     public static class WriteRequestTimeout { }
+
+    public static class HeartbeatTimeout { }
 }

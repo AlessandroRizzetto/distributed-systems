@@ -48,10 +48,10 @@ public class Main {
         ActorRef client = system.actorOf(Props.create(Client.class, replicas, coordinator), "client");
         client.tell(new Client.WriteRequest(replicas.get(0), 100), ActorRef.noSender());
         delay(1000);
-        coordinator.tell(new Coordinator.Crash(0), ActorRef.noSender()); // Simulate coordinator crash
-        client.tell(new Client.ReadRequest(replicas.get(0)), ActorRef.noSender());
-        delay(5000);
-        client.tell(new Client.WriteRequest(replicas.get(0), 200), ActorRef.noSender());
+        // coordinator.tell(new Coordinator.Crash(0), ActorRef.noSender()); // Simulate coordinator crash
+        // client.tell(new Client.ReadRequest(replicas.get(0)), ActorRef.noSender());
+        // delay(3000);
+        // client.tell(new Client.WriteRequest(replicas.get(0), 200), ActorRef.noSender());
 
         try {
             System.out.println(">>> Press ENTER to exit <<<");

@@ -19,7 +19,7 @@ public class Coordinator extends AbstractActor {
     private final Map<Integer, ActorRef> replicas = new HashMap<>();
     private Set<ActorRef> acks = new HashSet<>();
     private Cancellable heartbeatSchedule;
-    private boolean isCrashed = false;
+    private int isCrashed = 0;
 
     public Coordinator(int N) {
         this.quorumSize = N / 2 + 1;
@@ -28,18 +28,20 @@ public class Coordinator extends AbstractActor {
     }
 
     private void startHeartbeatSchedule() {
-        if (!isCrashed) {
-            heartbeatSchedule = getContext().system().scheduler().scheduleAtFixedRate(
-                    Duration.Zero(),
-                    Duration.create(5, TimeUnit.SECONDS),
-                    this::sendHeartbeat,
-                    getContext().dispatcher());
+        
+        heartbeatSchedule = getContext().system().scheduler().scheduleAtFixedRate(
+                Duration.Zero(),
+                Duration.create(5, TimeUnit.SECONDS),
+                this::sendHeartbeat,
+                getContext().dispatcher());
         }
-    }
+    
 
     private void sendHeartbeat() {
-        replicas.values().forEach(replica -> replica.tell(new Replica.Heartbeat(), getSelf()));
-        // Main.customPrint("Heartbeat sent by Coordinator");
+        if (this.isCrashed == 0){
+            replicas.values().forEach(replica -> replica.tell(new Replica.Heartbeat(), getSelf()));
+            Main.customPrint("Heartbeat sent by Coordinator");
+        }
     }
 
     @Override
@@ -66,7 +68,7 @@ public class Coordinator extends AbstractActor {
 
         // Simulate a Coordinator crash after receiving the write request from a replica
         // onCrash(new Crash(0));
-        if (!isCrashed) { 
+        if (this.isCrashed == 0) { 
             Main.customPrint("the Coordinator is sending update messages");
             replicas.values().forEach(replica -> replica.tell(new Replica.Update(updateId, msg.newValue), getSelf()));
         }
@@ -79,17 +81,20 @@ public class Coordinator extends AbstractActor {
         if (acks.size() >= quorumSize) {
             if (!acks.isEmpty()) {
                 // Simulate a Coordinator crash by calling the onCrash method
-                // onCrash(new Crash(0));
-                Main.customPrint("Quorum reached, broadcasting WRITEOK.");
-                replicas.values().forEach(replica -> replica.tell(new Replica.WriteOk(), getSelf()));
-                acks.clear();
+                onCrash(new Crash(0));
+                if (this.isCrashed == 0) {
+                    Main.customPrint("Quorum reached, broadcasting WRITEOK.");
+                    replicas.values().forEach(replica -> replica.tell(new Replica.WriteOk(), getSelf()));
+                    acks.clear();
+                }
             }
         }
     }
 
     private void onCrash(Crash crash) {
         Main.customPrint("Coordinator CRASH simulated!!!");
-        isCrashed = true;
+        this.isCrashed = 1;
+        getContext().become(crashed());
         // if (heartbeatSchedule != null) {
         // heartbeatSchedule.cancel();
         // heartbeatSchedule = null;
