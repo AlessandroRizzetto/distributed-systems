@@ -1,7 +1,8 @@
 package it.ds1;
+
 public class EpochSequencePair {
-    private final int epoch;
-    private final int seqNum;
+    public final int epoch;
+    public final int seqNum;
 
     public EpochSequencePair(int epoch, int seqNum) {
         this.epoch = epoch;
@@ -20,8 +21,10 @@ public class EpochSequencePair {
 
     @Override
     public boolean equals(Object obj) {
-        if (this == obj) return true;
-        if (obj == null || getClass() != obj.getClass()) return false;
+        if (this == obj)
+            return true;
+        if (obj == null || getClass() != obj.getClass())
+            return false;
         EpochSequencePair that = (EpochSequencePair) obj;
         return epoch == that.epoch && seqNum == that.seqNum;
     }

@@ -3,14 +3,18 @@ package it.ds1;
 import akka.actor.AbstractActor;
 import akka.actor.ActorRef;
 import scala.collection.immutable.List;
+import scala.collection.mutable.LinkedHashSet.Entry;
 import scala.concurrent.duration.Duration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.ArrayList;
+import java.util.Set;
+import java.util.HashSet;
 import java.util.concurrent.TimeUnit;
+import java.util.*;
 import akka.actor.Cancellable;
-import it.ds1.Replica.WriteOkTimeout;
-import it.ds1.Replica.WriteRequestTimeout;
+import akka.actor.Props;
+import it.ds1.Coordinator.Crash;
 
 public class Replica extends AbstractActor {
     private int id;
@@ -18,16 +22,19 @@ public class Replica extends AbstractActor {
     private EpochSequencePair lastUpdate;
     private ActorRef coordinator;
     private Map<EpochSequencePair, Integer> history = new HashMap<>();
-    private ArrayList<ActorRef> replicas = new ArrayList<>();
+    private HashMap<Integer, ActorRef> replicasMap = new HashMap<>();
+    private Set<Integer> crashedReplicas = new HashSet<>();
 
     private Cancellable heartbeatTimer;
     private Cancellable writeOkTimeout;
     private Cancellable writeRequestTimeout;
+    private Cancellable electionTimeout;
+    private boolean isCrashed = false;
 
     public Replica(int id, ActorRef coordinator) {
         this.id = id;
         this.coordinator = coordinator;
-        this.coordinator.tell(new Register(id), getSelf());
+        this.coordinator.tell(new Register(id), getSelf()); // Registra la replica presso il coordinatore
     }
 
     @Override
@@ -43,6 +50,8 @@ public class Replica extends AbstractActor {
                 .match(WriteRequestTimeout.class, this::onWriteRequestTimeout)
                 .match(Register.class, this::onRegister) // Aggiungi il gestore per il messaggio di registrazione
                 .match(AddReplicaRequest.class, this::onAddReplica)
+                .match(Crash.class, this::onCrash)
+                .match(Election.class, this::onElection)
                 .build();
     }
 
@@ -76,6 +85,12 @@ public class Replica extends AbstractActor {
         writeRequestTimeout = scheduleTimeout(writeRequestTimeout, new WriteRequestTimeout(), 5); // Timeout di 5
                                                                                                   // secondi per il
                                                                                                   // broadcast
+    }
+
+    private void startElectionTimeout(int replicaId) {
+        writeRequestTimeout = scheduleTimeout(electionTimeout, new ElectionTimeout(replicaId), 2); // Timeout di 2
+        // secondi per il
+        // broadcast
     }
 
     // Gestisce il messaggio Write
@@ -123,8 +138,8 @@ public class Replica extends AbstractActor {
 
     // Metodo per reimpostare il timer del heartbeat
     private void resetHeartbeatTimer() {
-        heartbeatTimer = scheduleTimeout(heartbeatTimer, new HeartbeatTimeout(), 10); // Timeout di 10 secondi per il
-                                                                                      // messaggio heartbeat
+        heartbeatTimer = scheduleTimeout(heartbeatTimer, new HeartbeatTimeout(), 100); // Timeout di 10 secondi per il
+                                                                                       // messaggio heartbeat
     }
 
     // Gestione della cancellazione dei timeout
@@ -142,36 +157,213 @@ public class Replica extends AbstractActor {
         }
     }
 
+    private void cancelElectionTimeout() {
+        if (electionTimeout != null) {
+            electionTimeout.cancel(); // Cancella il timeout attivo per la richiesta di scrittura
+            electionTimeout = null;
+        }
+    }
+
     // Gestione del timeout quando il coordinatore non invia il WRITEOK
     private void onWriteOkTimeout(WriteOkTimeout msg) {
+        if (isCrashed) {
+            return;
+        }
         Main.customPrint("Timeout while waiting for WRITEOK at Replica " + id + ": Coordinator crash suspected");
         // Gestione del crash o avvio di un'elezione
     }
 
     // Gestione del timeout quando il coordinatore non avvia il broadcast
     private void onWriteRequestTimeout(WriteRequestTimeout msg) {
+        if (isCrashed) {
+            return;
+        }
         Main.customPrint("Timeout while waiting for coordinator to broadcast WRITE request at Replica " + id
                 + ": Coordinator crash suspected");
         // Gestione del crash o avvio di un'elezione
+        startElection();
+    }
+
+    private void onElectionTimeout(ElectionTimeout electionTimeout) {
+        if (isCrashed) {
+            return;
+        }
+        crashedReplicas.add(electionTimeout.replicaId);
+        replicasMap.remove(electionTimeout.replicaId);
+        startElection();
     }
 
     // Gestione del timeout generale
     private void onHeartbeatTimeout(HeartbeatTimeout timeout) {
+        if (isCrashed) {
+            return;
+        }
         Main.customPrint("Timeout while waiting for coordinator to broadcast HEARTBEAT request at Replica " + id
                 + ": Coordinator crash suspected");
         // Potenziale codice per avviare l'elezione o altre azioni
     }
 
-    public int getId() {
-        return this.id;
+    private void onCrash(Crash crash) {
+        if (!isCrashed) {
+            Main.customPrint("Replica " + id + " CRASH simulated!!!");
+        }
+        this.isCrashed = true;
+        getContext().become(crashed());
+    }
+
+    private void onElection(Election election) {
+        getContext().become(election());
+        Main.customPrint("Replica " + id + " received election message");
+        var currentState = election.state;
+
+        if (currentState.containsKey(id)) {
+            Main.customPrint("Replica " + id + " ring completed");
+            ActorRef nextCoordinator = null;
+            Map.Entry<Integer, EpochSequencePair> mostRecentUpdate = null;
+            for (var entry : currentState.entrySet()) {
+                if (mostRecentUpdate == null ||
+                        (entry.getValue().seqNum > mostRecentUpdate.getValue().seqNum)) {
+                    mostRecentUpdate = entry;
+                    Main.customPrint(
+                            "Replica " + id + " with lastest update " + mostRecentUpdate.getValue().seqNum + "");
+                } else if (entry.getValue().seqNum == mostRecentUpdate.getValue().seqNum) {
+                    if (entry.getKey() > mostRecentUpdate.getKey()) {
+                        mostRecentUpdate = entry;
+                        Main.customPrint(
+                                "Replica " + id + " has the same sequence id, but the most recent is "
+                                        + mostRecentUpdate.getKey());
+                    }
+                }
+            }
+
+            nextCoordinator = replicasMap.get(mostRecentUpdate.getKey());
+
+            Main.customPrint(
+                    "Replica " + id + " is " + getSelf());
+            Main.customPrint(
+                    "Next coordinator is " + nextCoordinator);
+
+            if (nextCoordinator == null) {
+                nextCoordinator = getSelf();
+                // create the new coordinator with all the necesssary data
+                Main.customPrint("Replica " + id + " is the new coordinator");
+                var newCoordinator = Main.system.actorOf(
+                        Props.create(Coordinator.class, replicasMap.size() - 1,
+                                new EpochSequencePair(mostRecentUpdate.getValue().epoch + 1, 0)),
+                        "coordinator" + (mostRecentUpdate.getValue().epoch + 1));
+                for (var replica : replicasMap.entrySet()) {
+                    Main.customPrint("Coordinator is adding " + replica.getKey());
+                    newCoordinator.tell(new Register(replica.getKey()), replica.getValue()); // Registra la replica
+                                                                                             // presso il
+                    // coordinatore
+                    replica.getValue().tell(new RegisterNewCoordinator(newCoordinator), getSelf());
+                    Main.customPrint("Replica " + id + " sent sync message to the replica " + replica.getKey());
+                    replica.getValue().tell(new Replica.Sync(crashedReplicas), getSelf());
+                    onCrash(new Crash(0));
+                    isCrashed = true;
+                }
+            } else {
+                // just have to forward the message to the next replica
+                Main.customPrint("Replica " + id + " is forwarding the election message");
+                var nextReplica = getNextReplica();
+                nextReplica.getValue().tell(new Election(new HashMap<Integer, EpochSequencePair>(currentState)),
+                        getSelf());
+                startElectionTimeout(nextReplica.getKey());
+            }
+        } else {
+            // add the information of the replica and forward the message to the next
+            // replica
+            Main.customPrint("Replica " + id + " is adding its last update to the election message");
+            currentState.put(id, lastUpdate);
+            var nextReplica = getNextReplica();
+            nextReplica.getValue().tell(new Election(new HashMap<Integer, EpochSequencePair>(currentState)), getSelf());
+            startElectionTimeout(nextReplica.getKey());
+        }
+
+        getSender().tell(new Replica.Ack(getSelf()), getSelf());
+    }
+
+    private void onRegisterNewCoordinator(Replica.RegisterNewCoordinator registerNewCoordinator) {
+        this.coordinator = registerNewCoordinator.newCoordinator;
+    }
+
+    private void onSync(Replica.Sync sync) {
+        Main.customPrint("Replica " + id + " received the sync message");
+        for (var id : sync.crashedReplicas) {
+            replicasMap.remove(id);
+        }
+        getContext().become(createReceive());
+    }
+
+    public Receive crashed() {
+        return receiveBuilder()
+                .matchAny(msg -> {
+                })
+                .build();
+    }
+
+    private void startElection() {
+        getContext().become(election());
+        Main.customPrint("Replica " + id + " is in election state");
+
+        var nextReplica = getNextReplica();
+        nextReplica.getValue().tell(new Election(new HashMap<Integer, EpochSequencePair>() {
+            {
+                put(id, lastUpdate);
+            }
+        }), getSelf());
+
+        startElectionTimeout(nextReplica.getKey());
+    }
+
+    private Map.Entry<Integer, ActorRef> getNextReplica() {
+        var replicasIds = new ArrayList<Integer>(replicasMap.keySet());
+        int nextReplicaId = findNextGreater(replicasIds, id);
+        ActorRef nextReplica = replicasMap.get(nextReplicaId);
+
+        return new java.util.AbstractMap.SimpleEntry<Integer, ActorRef>(nextReplicaId, nextReplica);
+    }
+
+    private Integer findNextGreater(ArrayList<Integer> replicasIds, int id) {
+        Integer nextGreater = null;
+
+        // Iterate through each number in the sequence
+        var min = Collections.min(replicasIds);
+        for (int num : replicasIds) {
+            // Find the smallest number greater than the given value
+            if (num > id && (nextGreater == null || num < nextGreater)) {
+                nextGreater = num;
+            }
+        }
+
+        if (nextGreater == null) {
+            nextGreater = min;
+        }
+
+        return nextGreater;
+    }
+
+    public Receive election() {
+        return receiveBuilder()
+                // accettare gli ACK, SYNCRONIZATION e ELECTION
+                .match(Replica.Ack.class, this::onAck)
+                .match(Replica.ElectionTimeout.class, this::onElectionTimeout)
+                .match(Replica.RegisterNewCoordinator.class, this::onRegisterNewCoordinator)
+                .match(Election.class, this::onElection)
+                .match(Replica.Sync.class, this::onSync)
+                .build();
+    }
+
+    private void onAck(Replica.Ack msg) {
+        cancelElectionTimeout();
     }
 
     public void onAddReplica(AddReplicaRequest addReplica) {
-        addReplica.replicas.removeIf(replica -> replica.equals(addReplica.me));
-        this.replicas = addReplica.replicas;
-        Main.customPrint("Replica " + addReplica.me + " with id " + id + " is adding replica ");
-        for (ActorRef replica : this.replicas) {
-            Main.customPrint("Replica " + replica + " added ");
+        addReplica.replicasMap.remove(this.id);
+        this.replicasMap = addReplica.replicasMap;
+        Main.customPrint("Replica with id " + id + " is adding replicas:");
+        for (Map.Entry<Integer, ActorRef> entry : replicasMap.entrySet()) {
+            Main.customPrint("Replica with id " + entry.getKey() + " added for " + id);
         }
     }
 
@@ -202,6 +394,14 @@ public class Replica extends AbstractActor {
         }
     }
 
+    public static class Sync {
+        final Set<Integer> crashedReplicas;
+
+        public Sync(Set<Integer> crashedReplicas) {
+            this.crashedReplicas = crashedReplicas;
+        }
+    }
+
     public static class WriteOk {
     }
 
@@ -213,13 +413,19 @@ public class Replica extends AbstractActor {
         }
     }
 
-    public static class AddReplicaRequest {
-        final ArrayList<ActorRef> replicas;
-        final ActorRef me;
+    public static class RegisterNewCoordinator {
+        final ActorRef newCoordinator;
 
-        public AddReplicaRequest(ArrayList<ActorRef> replicas, ActorRef me) {
-            this.replicas = (ArrayList<ActorRef>) replicas;
-            this.me = me;
+        public RegisterNewCoordinator(ActorRef newCoordinator) {
+            this.newCoordinator = newCoordinator;
+        }
+    }
+
+    public static class AddReplicaRequest {
+        final HashMap<Integer, ActorRef> replicasMap;
+
+        public AddReplicaRequest(HashMap<Integer, ActorRef> replicasMap) {
+            this.replicasMap = replicasMap;
         }
     }
 
@@ -235,6 +441,31 @@ public class Replica extends AbstractActor {
     public static class WriteRequestTimeout {
     }
 
+    public static class ElectionTimeout {
+        final int replicaId;
+
+        public ElectionTimeout(int replicaId) {
+            this.replicaId = replicaId;
+        }
+
+    }
+
     public static class HeartbeatTimeout {
+    }
+
+    public static class Crash {
+        final int duration;
+
+        public Crash(int duration) {
+            this.duration = duration;
+        }
+    }
+
+    public static class Election {
+        final HashMap<Integer, EpochSequencePair> state;
+
+        public Election(HashMap<Integer, EpochSequencePair> state) {
+            this.state = state;
+        }
     }
 }
