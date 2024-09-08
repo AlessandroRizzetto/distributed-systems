@@ -43,9 +43,10 @@ public class Main {
         final int N = 5; // Number of replicas
         ArrayList<ActorRef> replicas = new ArrayList<>();
         HashMap<Integer, ActorRef> replicasMap = new HashMap<>();
-
         ActorRef coordinator = system.actorOf(Props.create(Coordinator.class, N, new EpochSequencePair(0, 0)),
                 "coordinator");
+
+        // Create all replicas and make shure they know about the coordinator
         for (int i = 0; i < N; i++) {
             ActorRef replica = system.actorOf(Props.create(Replica.class, i, coordinator), "replica" + i);
             replica.tell(new Replica.Register(i), ActorRef.noSender());
@@ -58,20 +59,22 @@ public class Main {
             replica.tell(new Replica.AddReplicaRequest(new HashMap<>(replicasMap)), coordinator);
         }
 
+        // Client that sends the requests
         client = system.actorOf(Props.create(Client.class, replicas, coordinator), "client");
-        client.tell(new Client.WriteRequest(replicas.get(0), 100), ActorRef.noSender());
-        delay(1000);
-        // coordinator.tell(new Coordinator.Crash(0), ActorRef.noSender()); // Simulate
-        // coordinator crash
-        delay(20000);
-        client.tell(new Client.ReadRequest(replicas.get(0)), ActorRef.noSender());
-        // replicas.get(1).tell(new Replica.Crash(0), ActorRef.noSender()); // Simulate
-        // replica crash
-        // delay(1000);
-        // client.tell(new Client.WriteRequest(replicas.get(0), 200), ActorRef.noSender());
-        // delay(20000);
-        // client.tell(new Client.WriteRequest(replicas.get(0), 3000),
-        // ActorRef.noSender());
+
+        // =================================Tests================================
+
+        // testReplicaCrash(replicas);
+        // testWriteAndCoordinatorCrash(replicas, coordinator);
+        // testCoordinatorCrash(coordinator);
+
+        // Coordinator crash before sending WRITEOK -> on Coordinator set to true the
+        // boolean testAckCrash
+        // testWriteCoordinatorCrashPendingUpdateRead(replicas);
+
+        // Replica crash during election -> on Replica set to true the boolean
+        // isNextReplicaCrashedTest
+        // testReplicaCrashDuringElection(replicas, coordinator);
 
         try {
             System.out.println(">>> Press ENTER to exit <<<");
@@ -81,5 +84,43 @@ public class Main {
 
         saveLogToFile("log.txt");
         system.terminate();
+    }
+
+    // Write request -> read request -> replica crash -> write request
+    private static void testReplicaCrash(ArrayList<ActorRef> replicas) {
+        client.tell(new Client.WriteRequest(replicas.get(0), 100), ActorRef.noSender());
+        delay(1000);
+        client.tell(new Client.ReadRequest(replicas.get(0)), ActorRef.noSender());
+        delay(1000);
+        replicas.get(1).tell(new Replica.Crash(0), ActorRef.noSender()); // Simulate
+        delay(1000);
+        client.tell(new Client.WriteRequest(replicas.get(0), 200), ActorRef.noSender());
+    }
+
+    // Write request -> coordinator crash
+    private static void testWriteAndCoordinatorCrash(ArrayList<ActorRef> replicas, ActorRef coordinator) {
+        client.tell(new Client.WriteRequest(replicas.get(0), 100), ActorRef.noSender());
+        delay(1000);
+        client.tell(new Client.WriteRequest(replicas.get(0), 200), ActorRef.noSender());
+        delay(1000);
+        coordinator.tell(new Coordinator.Crash(0), ActorRef.noSender()); // Simulate
+    }
+
+    // Coordinator crash
+    private static void testCoordinatorCrash(ActorRef coordinator) {
+        coordinator.tell(new Coordinator.Crash(0), ActorRef.noSender()); // Simulate
+    }
+
+    // Write request -> coordinator crash -> recover update -> read request
+    private static void testWriteCoordinatorCrashPendingUpdateRead(ArrayList<ActorRef> replicas) {
+        client.tell(new Client.WriteRequest(replicas.get(0), 100), ActorRef.noSender());
+        delay(20000);
+        client.tell(new Client.ReadRequest(replicas.get(0)), ActorRef.noSender());
+    }
+
+    private static void testReplicaCrashDuringElection(ArrayList<ActorRef> replicas, ActorRef coordinator) {
+        coordinator.tell(new Coordinator.Crash(0), ActorRef.noSender()); // Simulate
+        delay(5000);
+        client.tell(new Client.WriteRequest(replicas.get(0), 100), ActorRef.noSender());
     }
 }

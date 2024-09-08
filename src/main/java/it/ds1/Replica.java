@@ -15,7 +15,7 @@ import it.ds1.Coordinator.Crash;
 public class Replica extends AbstractActor {
     private int id;
     private int localValue;
-    private EpochSequencePair lastUpdate;
+    private EpochSequencePair lastUpdate = new EpochSequencePair(0, 0);
     private ActorRef coordinator;
     private Map<EpochSequencePair, Integer> history = new HashMap<>();
     private HashMap<Integer, ActorRef> replicasMap = new HashMap<>();
@@ -30,6 +30,8 @@ public class Replica extends AbstractActor {
     private boolean isNewCoordinatorElected = false;
     private boolean underElection = false;
     private boolean updateToComplete = false;
+    private boolean isForwardingMessage = false;
+    public static boolean isNextReplicaCrashedTest = false;
 
     public Replica(int id, ActorRef coordinator) {
         this.id = id;
@@ -54,6 +56,7 @@ public class Replica extends AbstractActor {
                 .match(Election.class, this::onElection)
                 .match(Replica.ElectionTimeout.class, this::onElectionTimeout2)
                 .match(Replica.Ack.class, this::onAck)
+                .match(Replica.RingElectionTimeout.class, this::onRingElectionTimeout)
                 .build();
     }
 
@@ -101,6 +104,12 @@ public class Replica extends AbstractActor {
         // broadcast
     }
 
+    // Metodo per reimpostare il timer del heartbeat
+    private void resetHeartbeatTimer() {
+        heartbeatTimer = scheduleTimeout(heartbeatTimer, new HeartbeatTimeout(), 20); // Timeout di 30 secondi per il
+                                                                                      // messaggio heartbeat
+    }
+
     // Gestisce il messaggio Write
     private void onWrite(Write msg) {
 
@@ -129,31 +138,24 @@ public class Replica extends AbstractActor {
 
     // Gestisce l'aggiornamento da parte del coordinatore
     private void onUpdate(Update msg) {
-            Main.customPrint("Replica " + id + " received update: " + msg.updateId + " with value " + msg.newValue);
-            if (history.containsKey(msg.updateId)) {
-                Main.customPrint("Replica " + id + " already has the update: " + msg.updateId);
-                coordinator.tell(new Ack(getSelf()), getSelf());
-            } else {
-                history.put(msg.updateId, msg.newValue);
-                lastUpdate = msg.updateId;
-                getSender().tell(new Ack(getSelf()), getSelf());
-            }
-            
-            
-            cancelWriteRequestTimeout(); // Delete the write request timeout
-            startWriteOkTimeout(); // Avvia il timeout per aspettare il WRITEOK
+        Main.customPrint("Replica " + id + " received update: " + msg.updateId + " with value " + msg.newValue);
+        if (history.containsKey(msg.updateId)) {
+            Main.customPrint("Replica " + id + " already has the update: " + msg.updateId);
+            coordinator.tell(new Ack(getSelf()), getSelf());
+        } else {
+            history.put(msg.updateId, msg.newValue);
+            lastUpdate = msg.updateId;
+            getSender().tell(new Ack(getSelf()), getSelf());
+        }
+
+        cancelWriteRequestTimeout(); // Delete the write request timeout
+        startWriteOkTimeout(); // Avvia il timeout per aspettare il WRITEOK
     }
 
     // Gestistione del messaggio Heartbeat
     private void onHeartbeat(Heartbeat heartbeat) {
         Main.customPrint("Heartbeat received at Replica " + id);
         resetHeartbeatTimer(); // Reimposta il timer del heartbeat quando viene ricevuto un heartbeat
-    }
-
-    // Metodo per reimpostare il timer del heartbeat
-    private void resetHeartbeatTimer() {
-        heartbeatTimer = scheduleTimeout(heartbeatTimer, new HeartbeatTimeout(), 10); // Timeout di 10 secondi per il
-                                                                                      // messaggio heartbeat
     }
 
     // Gestione della cancellazione dei timeout
@@ -228,7 +230,8 @@ public class Replica extends AbstractActor {
         if (isCrashed) {
             return;
         }
-        Main.customPrint("Timeout while waiting for the ring to complete at Replica " + id + ": Coordinator crash suspected");
+        Main.customPrint(
+                "Timeout while waiting for the ring to complete at Replica " + id + ": Coordinator crash suspected");
         // Potenziale codice per avviare l'elezione o altre azioni
         isNewCoordinatorElected = false;
         underElection = true;
@@ -259,8 +262,21 @@ public class Replica extends AbstractActor {
         getContext().become(crashed());
     }
 
+    private void onCrashForElection(Crash crash) {
+        if (!isCrashed) {
+            Main.customPrint("Replica " + id + " CRASH simulated for coordinator election!!!");
+        }
+        this.isCrashed = true;
+        getContext().become(crashed());
+    }
+
     private void onElection(Election election) {
         if (isNewCoordinatorElected) {
+            return;
+        }
+        if (isNextReplicaCrashedTest) {
+            isNextReplicaCrashedTest = false;
+            getSelf().tell(new Replica.Crash(0), ActorRef.noSender());
             return;
         }
         getContext().become(election());
@@ -297,17 +313,22 @@ public class Replica extends AbstractActor {
             Main.customPrint(
                     "Next coordinator is " + nextCoordinator);
 
-            if (nextCoordinator == null && currentState.size() == replicasMap.size() + 1) {
+            Main.customPrint(
+                    "Replica's replicaMap " + replicasMap);
+
+            if (nextCoordinator == null && (currentState.size() == replicasMap.size() + 1 || isForwardingMessage)) {
+                isForwardingMessage = false;
                 nextCoordinator = getSelf();
                 // create the new coordinator with all the necesssary data
-                onCrash(new Crash(0));
+                onCrashForElection(new Crash(0));
                 isCrashed = true;
                 Main.customPrint("Replica " + id + " is the new coordinator");
                 var newCoordinator = Main.system.actorOf(
                         Props.create(Coordinator.class, replicasMap.size() - 1,
-                                new EpochSequencePair(mostRecentUpdate.getValue().epoch, mostRecentUpdate.getValue().seqNum)),
+                                new EpochSequencePair(mostRecentUpdate.getValue().epoch,
+                                        mostRecentUpdate.getValue().seqNum)),
                         "coordinator" + (mostRecentUpdate.getValue().epoch + 1));
-                
+
                 for (var replica : replicasMap.entrySet()) {
                     Main.customPrint("Coordinator is adding " + replica.getKey());
                     newCoordinator.tell(new Register(replica.getKey()), replica.getValue()); // Registra la replica
@@ -316,20 +337,24 @@ public class Replica extends AbstractActor {
                     replica.getValue().tell(new RegisterNewCoordinator(newCoordinator), getSelf());
                     Main.customPrint("Replica " + id + " sent sync message to the replica " + replica.getKey());
                     replica.getValue().tell(new Replica.Sync(crashedReplicas), getSelf());
-                    
+
                 }
-                
+
                 Main.delay(2000);
-                if(updateToComplete){
+                if (updateToComplete) {
                     Main.customPrint("New Coordinator is completing the update");
                     Main.customPrint("the Coordinator is sending update messages");
                     // for (var replica : replicasMap.entrySet()) {
-                    //     replicas.values().forEach(replica -> replica.tell(new Replica.Update(updateId, msg.newValue), getSelf()));
-                    //     replica.getValue().tell(new Replica.Update(mostRecentUpdate.getValue(), history.get(mostRecentUpdate.getValue())), replica.getValue());
+                    // replicas.values().forEach(replica -> replica.tell(new
+                    // Replica.Update(updateId, msg.newValue), getSelf()));
+                    // replica.getValue().tell(new Replica.Update(mostRecentUpdate.getValue(),
+                    // history.get(mostRecentUpdate.getValue())), replica.getValue());
                     // }
                     EpochSequencePair mostRecentUpdateValue = mostRecentUpdate.getValue();
                     replicasMap.entrySet().forEach(entry -> {
-                        entry.getValue().tell(new Replica.Update(mostRecentUpdateValue, history.get(mostRecentUpdateValue)), getSelf());
+                        entry.getValue().tell(
+                                new Replica.Update(mostRecentUpdateValue, history.get(mostRecentUpdateValue)),
+                                getSelf());
                     });
                     updateToComplete = false;
                 }
@@ -337,6 +362,7 @@ public class Replica extends AbstractActor {
                 newCoordinator.tell(new UpdateEpoch(mostRecentUpdate.getValue().epoch + 1), getSelf());
             } else {
                 // just have to forward the message to the next replica
+                isForwardingMessage = true;
                 Main.customPrint("Replica " + id + " is forwarding the election message");
                 var nextReplica = getNextReplica();
                 nextReplica.getValue().tell(new Election(new HashMap<Integer, EpochSequencePair>(currentState)),
@@ -354,8 +380,10 @@ public class Replica extends AbstractActor {
         }
 
         getSender().tell(new Ack(getSelf()), getSelf());
-        // Simulate the crash of a replica during election after sending the ACK for the election message
-        // Main.customPrint("Replica " + id + " is simulating a crash during election after sending ACK");
+        // Simulate the crash of a replica during election after sending the ACK for the
+        // election message
+        // Main.customPrint("Replica " + id + " is simulating a crash during election
+        // after sending ACK");
         // getSelf().tell(new Replica.Crash(0), ActorRef.noSender());
     }
 
@@ -433,6 +461,8 @@ public class Replica extends AbstractActor {
                 .match(Replica.Sync.class, this::onSync)
                 .match(Replica.Update.class, this::onUpdate)
                 .match(Replica.RingElectionTimeout.class, this::onRingElectionTimeout)
+                .match(Heartbeat.class, this::onHeartbeat)
+                .match(Crash.class, this::onCrash)
                 .build();
     }
 

@@ -20,8 +20,7 @@ public class Coordinator extends AbstractActor {
     private Set<ActorRef> acks = new HashSet<>();
     private Cancellable heartbeatSchedule;
     private int isCrashed = 0;
-    public static boolean testAckCrash = true;
-
+    public static boolean testAckCrash = false;
 
     public Coordinator(int N, EpochSequencePair epochSequencePair) {
         this.quorumSize = N / 2 + 1;
@@ -35,7 +34,7 @@ public class Coordinator extends AbstractActor {
 
         heartbeatSchedule = getContext().system().scheduler().scheduleAtFixedRate(
                 Duration.Zero(),
-                Duration.create(1, TimeUnit.SECONDS),
+                Duration.create(4, TimeUnit.SECONDS),
                 this::sendHeartbeat,
                 getContext().dispatcher());
     }
