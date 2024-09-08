@@ -33,7 +33,7 @@ public class Coordinator extends AbstractActor {
 
         heartbeatSchedule = getContext().system().scheduler().scheduleAtFixedRate(
                 Duration.Zero(),
-                Duration.create(5, TimeUnit.SECONDS),
+                Duration.create(1, TimeUnit.SECONDS),
                 this::sendHeartbeat,
                 getContext().dispatcher());
     }

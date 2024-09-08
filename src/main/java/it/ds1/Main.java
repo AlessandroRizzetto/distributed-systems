@@ -65,10 +65,12 @@ public class Main {
         // client.tell(new Client.ReadRequest(replicas.get(0)), ActorRef.noSender());
         // replicas.get(1).tell(new Replica.Crash(0), ActorRef.noSender()); // Simulate
         // replica crash
-        delay(1000);
-        client.tell(new Client.WriteRequest(replicas.get(0), 200), ActorRef.noSender());
-        delay(20000);
-        client.tell(new Client.WriteRequest(replicas.get(0), 3000), ActorRef.noSender());
+        // delay(1000);
+        // client.tell(new Client.WriteRequest(replicas.get(0), 200),
+        // ActorRef.noSender());
+        // delay(20000);
+        // client.tell(new Client.WriteRequest(replicas.get(0), 3000),
+        // ActorRef.noSender());
 
         try {
             System.out.println(">>> Press ENTER to exit <<<");
