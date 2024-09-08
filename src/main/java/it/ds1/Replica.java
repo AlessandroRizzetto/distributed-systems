@@ -244,7 +244,6 @@ public class Replica extends AbstractActor {
         }
         Main.customPrint(
                 "Timeout while waiting for the ring to complete at Replica " + id + ": Coordinator crash suspected");
-        // Potenziale codice per avviare l'elezione o altre azioni
         isNewCoordinatorElected = false;
         underElection = true;
         startElection();
