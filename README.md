@@ -50,6 +50,4 @@ gradle run
 
 Test the system using:
 
-```bash
-gradle test
-```
+Uncomment one test at the time in the `Main` class and run the by following the suggested guidelines.
