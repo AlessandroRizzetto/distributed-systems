@@ -72,7 +72,7 @@ public class Coordinator extends AbstractActor {
         acks.clear();
 
         // Simulate a Coordinator crash after receiving the write request from a replica
-        onCrash(new Crash(0));
+        // onCrash(new Crash(0));
         if (this.isCrashed == 0) {
             Main.customPrint("the Coordinator is sending update messages");
             replicas.values().forEach(replica -> replica.tell(new Replica.Update(updateId, msg.newValue), getSelf()));

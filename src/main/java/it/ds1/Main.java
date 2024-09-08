@@ -69,6 +69,7 @@ public class Main {
         // testCoordinatorCrash(coordinator);
 
         // Coordinator crash after sending WRITE from replica
+        // Uncomment line 75 Coordinator.java
         // testCoordinatorCrashAfterWriteFromReplica(replicas, coordinator); // Update message timeout
 
         // Coordinator crash before sending WRITEOK -> on Coordinator set to true the
