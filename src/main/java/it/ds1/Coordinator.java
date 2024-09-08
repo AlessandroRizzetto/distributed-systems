@@ -20,6 +20,8 @@ public class Coordinator extends AbstractActor {
     private Set<ActorRef> acks = new HashSet<>();
     private Cancellable heartbeatSchedule;
     private int isCrashed = 0;
+    public static boolean testAckCrash = true;
+
 
     public Coordinator(int N, EpochSequencePair epochSequencePair) {
         this.quorumSize = N / 2 + 1;
@@ -52,6 +54,7 @@ public class Coordinator extends AbstractActor {
                 .match(Replica.Ack.class, this::onAck)
                 .match(Replica.Register.class, this::onRegisterReplica)
                 .match(Crash.class, this::onCrash)
+                .match(Replica.UpdateEpoch.class, this::onUpdateEpoch)
                 .build();
     }
 
@@ -84,7 +87,11 @@ public class Coordinator extends AbstractActor {
         if (acks.size() >= quorumSize) {
             if (!acks.isEmpty()) {
                 // Simulate a Coordinator crash by calling the onCrash method
-                // onCrash(new Crash(0));
+                if (testAckCrash) {
+                    Main.customPrint("Coordinator during ACK CRASH simulated!!!");
+                    onCrash(new Crash(0));
+                    testAckCrash = false;
+                }
                 if (this.isCrashed == 0) {
                     Main.customPrint("Quorum reached, broadcasting WRITEOK.");
                     replicas.values().forEach(replica -> replica.tell(new Replica.WriteOk(), getSelf()));
@@ -102,6 +109,14 @@ public class Coordinator extends AbstractActor {
         // heartbeatSchedule.cancel();
         // heartbeatSchedule = null;
         // }
+    }
+
+    private void onUpdateEpoch(Replica.UpdateEpoch msg) {
+        if (msg.epoch > epoch) {
+            Main.customPrint("Updating coordinator epoch from " + epoch + " to " + msg.epoch);
+            epoch = msg.epoch;
+            seqNumber = 0;
+        }
     }
 
     public Receive crashed() {

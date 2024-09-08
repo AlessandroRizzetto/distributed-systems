@@ -14,6 +14,7 @@ import java.util.HashMap;
 public class Main {
     private static final List<String> logMessages = new ArrayList<>();
     public static final ActorSystem system = ActorSystem.create("replica-system");
+    private static ActorRef client;
 
     public static void customPrint(String message) {
         System.out.println(message);
@@ -57,17 +58,17 @@ public class Main {
             replica.tell(new Replica.AddReplicaRequest(new HashMap<>(replicasMap)), coordinator);
         }
 
-        ActorRef client = system.actorOf(Props.create(Client.class, replicas, coordinator), "client");
+        client = system.actorOf(Props.create(Client.class, replicas, coordinator), "client");
         client.tell(new Client.WriteRequest(replicas.get(0), 100), ActorRef.noSender());
         delay(1000);
-        coordinator.tell(new Coordinator.Crash(0), ActorRef.noSender()); // Simulate
+        // coordinator.tell(new Coordinator.Crash(0), ActorRef.noSender()); // Simulate
         // coordinator crash
-        // client.tell(new Client.ReadRequest(replicas.get(0)), ActorRef.noSender());
+        delay(20000);
+        client.tell(new Client.ReadRequest(replicas.get(0)), ActorRef.noSender());
         // replicas.get(1).tell(new Replica.Crash(0), ActorRef.noSender()); // Simulate
         // replica crash
         // delay(1000);
-        // client.tell(new Client.WriteRequest(replicas.get(0), 200),
-        // ActorRef.noSender());
+        // client.tell(new Client.WriteRequest(replicas.get(0), 200), ActorRef.noSender());
         // delay(20000);
         // client.tell(new Client.WriteRequest(replicas.get(0), 3000),
         // ActorRef.noSender());

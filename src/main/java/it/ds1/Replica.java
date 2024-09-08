@@ -5,11 +5,7 @@ import akka.actor.ActorRef;
 import scala.collection.immutable.List;
 import scala.collection.mutable.LinkedHashSet.Entry;
 import scala.concurrent.duration.Duration;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.ArrayList;
-import java.util.Set;
-import java.util.HashSet;
+
 import java.util.concurrent.TimeUnit;
 import java.util.*;
 import akka.actor.Cancellable;
@@ -29,9 +25,11 @@ public class Replica extends AbstractActor {
     private Cancellable writeOkTimeout;
     private Cancellable writeRequestTimeout;
     private Cancellable electionTimeout;
+    private Cancellable ringElectionTimeout;
     private boolean isCrashed = false;
     private boolean isNewCoordinatorElected = false;
     private boolean underElection = false;
+    private boolean updateToComplete = false;
 
     public Replica(int id, ActorRef coordinator) {
         this.id = id;
@@ -97,6 +95,12 @@ public class Replica extends AbstractActor {
         // broadcast
     }
 
+    private void startRingElectionTimeout() {
+        ringElectionTimeout = scheduleTimeout(ringElectionTimeout, new RingElectionTimeout(), 20); // Timeout di 20
+        // secondi per il
+        // broadcast
+    }
+
     // Gestisce il messaggio Write
     private void onWrite(Write msg) {
 
@@ -125,14 +129,19 @@ public class Replica extends AbstractActor {
 
     // Gestisce l'aggiornamento da parte del coordinatore
     private void onUpdate(Update msg) {
-        if (!history.containsKey(msg.updateId)) {
             Main.customPrint("Replica " + id + " received update: " + msg.updateId + " with value " + msg.newValue);
-            lastUpdate = msg.updateId;
-            history.put(msg.updateId, msg.newValue);
-            getSender().tell(new Ack(getSelf()), getSelf());
+            if (history.containsKey(msg.updateId)) {
+                Main.customPrint("Replica " + id + " already has the update: " + msg.updateId);
+                coordinator.tell(new Ack(getSelf()), getSelf());
+            } else {
+                history.put(msg.updateId, msg.newValue);
+                lastUpdate = msg.updateId;
+                getSender().tell(new Ack(getSelf()), getSelf());
+            }
+            
+            
             cancelWriteRequestTimeout(); // Delete the write request timeout
             startWriteOkTimeout(); // Avvia il timeout per aspettare il WRITEOK
-        }
     }
 
     // Gestistione del messaggio Heartbeat
@@ -169,6 +178,13 @@ public class Replica extends AbstractActor {
         }
     }
 
+    private void cancelRingElectionTimeout() {
+        if (ringElectionTimeout != null) {
+            ringElectionTimeout.cancel(); // Cancella il timeout attivo per la richiesta di scrittura
+            ringElectionTimeout = null;
+        }
+    }
+
     // Gestione del timeout quando il coordinatore non invia il WRITEOK
     private void onWriteOkTimeout(WriteOkTimeout msg) {
         if (isCrashed) {
@@ -177,6 +193,11 @@ public class Replica extends AbstractActor {
 
         Main.customPrint("Timeout while waiting for WRITEOK at Replica " + id + ": Coordinator crash suspected");
         // Gestione del crash o avvio di un'elezione
+        isNewCoordinatorElected = false;
+        underElection = true;
+        updateToComplete = true;
+        startElection(); // In this case we need to finish the update request of the old coordinator
+                         // before starting the new epoch
     }
 
     // Gestione del timeout quando il coordinatore non avvia il broadcast
@@ -187,6 +208,8 @@ public class Replica extends AbstractActor {
         Main.customPrint("Timeout while waiting for coordinator to broadcast WRITE request at Replica " + id
                 + ": Coordinator crash suspected");
         // Gestione del crash o avvio di un'elezione
+        isNewCoordinatorElected = false;
+        underElection = true;
         startElection();
     }
 
@@ -196,6 +219,17 @@ public class Replica extends AbstractActor {
         }
         crashedReplicas.add(electionTimeout.replicaId);
         replicasMap.remove(electionTimeout.replicaId);
+        isNewCoordinatorElected = false;
+        underElection = true;
+        startElection();
+    }
+
+    private void onRingElectionTimeout(RingElectionTimeout timeout) {
+        if (isCrashed) {
+            return;
+        }
+        Main.customPrint("Timeout while waiting for the ring to complete at Replica " + id + ": Coordinator crash suspected");
+        // Potenziale codice per avviare l'elezione o altre azioni
         isNewCoordinatorElected = false;
         underElection = true;
         startElection();
@@ -235,6 +269,7 @@ public class Replica extends AbstractActor {
 
         if (currentState.containsKey(id)) {
             Main.customPrint("Replica " + id + " ring completed");
+            cancelRingElectionTimeout(); // Cancel the timeout because the ring is completed
             ActorRef nextCoordinator = null;
             Map.Entry<Integer, EpochSequencePair> mostRecentUpdate = null;
             Main.customPrint(
@@ -265,11 +300,14 @@ public class Replica extends AbstractActor {
             if (nextCoordinator == null && currentState.size() == replicasMap.size() + 1) {
                 nextCoordinator = getSelf();
                 // create the new coordinator with all the necesssary data
+                onCrash(new Crash(0));
+                isCrashed = true;
                 Main.customPrint("Replica " + id + " is the new coordinator");
                 var newCoordinator = Main.system.actorOf(
                         Props.create(Coordinator.class, replicasMap.size() - 1,
-                                new EpochSequencePair(mostRecentUpdate.getValue().epoch + 1, 0)),
+                                new EpochSequencePair(mostRecentUpdate.getValue().epoch, mostRecentUpdate.getValue().seqNum)),
                         "coordinator" + (mostRecentUpdate.getValue().epoch + 1));
+                
                 for (var replica : replicasMap.entrySet()) {
                     Main.customPrint("Coordinator is adding " + replica.getKey());
                     newCoordinator.tell(new Register(replica.getKey()), replica.getValue()); // Registra la replica
@@ -278,9 +316,25 @@ public class Replica extends AbstractActor {
                     replica.getValue().tell(new RegisterNewCoordinator(newCoordinator), getSelf());
                     Main.customPrint("Replica " + id + " sent sync message to the replica " + replica.getKey());
                     replica.getValue().tell(new Replica.Sync(crashedReplicas), getSelf());
-                    onCrash(new Crash(0));
-                    isCrashed = true;
+                    
                 }
+                
+                Main.delay(2000);
+                if(updateToComplete){
+                    Main.customPrint("New Coordinator is completing the update");
+                    Main.customPrint("the Coordinator is sending update messages");
+                    // for (var replica : replicasMap.entrySet()) {
+                    //     replicas.values().forEach(replica -> replica.tell(new Replica.Update(updateId, msg.newValue), getSelf()));
+                    //     replica.getValue().tell(new Replica.Update(mostRecentUpdate.getValue(), history.get(mostRecentUpdate.getValue())), replica.getValue());
+                    // }
+                    EpochSequencePair mostRecentUpdateValue = mostRecentUpdate.getValue();
+                    replicasMap.entrySet().forEach(entry -> {
+                        entry.getValue().tell(new Replica.Update(mostRecentUpdateValue, history.get(mostRecentUpdateValue)), getSelf());
+                    });
+                    updateToComplete = false;
+                }
+                Main.delay(100);
+                newCoordinator.tell(new UpdateEpoch(mostRecentUpdate.getValue().epoch + 1), getSelf());
             } else {
                 // just have to forward the message to the next replica
                 Main.customPrint("Replica " + id + " is forwarding the election message");
@@ -300,11 +354,15 @@ public class Replica extends AbstractActor {
         }
 
         getSender().tell(new Ack(getSelf()), getSelf());
+        // Simulate the crash of a replica during election after sending the ACK for the election message
+        // Main.customPrint("Replica " + id + " is simulating a crash during election after sending ACK");
+        // getSelf().tell(new Replica.Crash(0), ActorRef.noSender());
     }
 
     private void onRegisterNewCoordinator(Replica.RegisterNewCoordinator registerNewCoordinator) {
         this.isNewCoordinatorElected = true;
         this.coordinator = registerNewCoordinator.newCoordinator;
+        Main.customPrint("Replica " + id + " received the new coordinator " + coordinator);
     }
 
     private void onSync(Replica.Sync sync) {
@@ -335,6 +393,7 @@ public class Replica extends AbstractActor {
         }), getSelf());
 
         startElectionTimeout(nextReplica.getKey());
+        startRingElectionTimeout();
     }
 
     private Map.Entry<Integer, ActorRef> getNextReplica() {
@@ -372,6 +431,8 @@ public class Replica extends AbstractActor {
                 .match(Replica.RegisterNewCoordinator.class, this::onRegisterNewCoordinator)
                 .match(Election.class, this::onElection)
                 .match(Replica.Sync.class, this::onSync)
+                .match(Replica.Update.class, this::onUpdate)
+                .match(Replica.RingElectionTimeout.class, this::onRingElectionTimeout)
                 .build();
     }
 
@@ -452,6 +513,14 @@ public class Replica extends AbstractActor {
         }
     }
 
+    public static class UpdateEpoch {
+        final int epoch;
+
+        public UpdateEpoch(int epoch) {
+            this.epoch = epoch;
+        }
+    }
+
     public static class Timeout {
     }
 
@@ -471,6 +540,9 @@ public class Replica extends AbstractActor {
             this.replicaId = replicaId;
         }
 
+    }
+
+    public static class RingElectionTimeout {
     }
 
     public static class HeartbeatTimeout {
