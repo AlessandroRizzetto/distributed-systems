@@ -62,11 +62,16 @@ public class Main {
         // Client that sends the requests
         client = system.actorOf(Props.create(Client.class, replicas, coordinator), "client");
 
+        client.tell(new Client.WriteRequest(replicas.get(0), 100), ActorRef.noSender());
+
         // =================================Tests================================
 
         // testReplicaCrash(replicas);
-        // testWriteAndCoordinatorCrash(replicas, coordinator);
+        // testWriteAndCoordinatorCrash(replicas, coordinator); // Heartbeat timeout
         // testCoordinatorCrash(coordinator);
+
+        // Coordinator crash after sending WRITE from replica
+        //testCoordinatorCrashAfterWriteFromReplica(replicas, coordinator); // Update message timeout
 
         // Coordinator crash before sending WRITEOK -> on Coordinator set to true the
         // boolean testAckCrash
@@ -84,6 +89,11 @@ public class Main {
 
         saveLogToFile("log.txt");
         system.terminate();
+    }
+
+    // Write request -> coordinator crash after sending WRITE, no UPDATE message received
+    private static void testCoordinatorCrashAfterWriteFromReplica(ArrayList<ActorRef> replicas, ActorRef coordinator) {
+        client.tell(new Client.WriteRequest(replicas.get(0), 100), ActorRef.noSender());
     }
 
     // Write request -> read request -> replica crash -> write request

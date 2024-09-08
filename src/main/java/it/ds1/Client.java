@@ -33,7 +33,7 @@ public class Client extends AbstractActor {
 
     private void onWriteRequest(WriteRequest msg) {
         Main.customPrint("Client write request to Replica " + replicas.indexOf(msg.targetReplica) + " with new value: " + msg.newValue);
-        msg.targetReplica.tell(new Replica.Write(msg.newValue), getSelf());  // Invio alla replica specifica
+        msg.targetReplica.tell(new Replica.Write(msg.newValue), getSelf());  // Send the write request to the target replica
     }
     
 
@@ -54,7 +54,7 @@ public class Client extends AbstractActor {
     }
 
     public static class WriteRequest {
-        final ActorRef targetReplica; // The replica to write to
+        final ActorRef targetReplica;
         final int newValue;
     
         public WriteRequest(ActorRef targetReplica, int newValue) {

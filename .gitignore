@@ -27,4 +27,4 @@ replay_pid*
 build/
 .vscode/
 bin/
-
+*.txt
