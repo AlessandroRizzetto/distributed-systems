@@ -1,50 +1,48 @@
 Quorum size: 3
 Heartbeat sent by Coordinator
 New replicas size: 0
-Replica with id 3 is adding replicas:
 New replicas: {}
-Replica with id 2 is adding replicas:
-Replica with id 4 is adding replicas:
-Replica with id 0 is adding replicas:
 Coordinator registered Replica 0
-Replica with id 1 is adding replicas:
 New replicas size: 1
 Client write request to Replica 0 with new value: 100
-Client write request to Replica 0 with new value: 100
-Replica with id 0 added for 2
-Replica with id 1 added for 2
-Replica with id 3 added for 2
-New replicas: {0=Actor[akka://replica-system/user/replica0#241571661]}
-Replica with id 0 added for 1
-Coordinator registered Replica 1
-Replica with id 4 added for 2
-Replica with id 0 added for 4
-Replica with id 0 added for 3
+Replica with id 2 is adding replicas:
+Replica with id 1 is adding replicas:
+Replica with id 0 is adding replicas:
+Replica with id 4 is adding replicas:
+Replica with id 3 is adding replicas:
 Replica with id 1 added for 0
-Replica with id 1 added for 3
-Replica with id 1 added for 4
-New replicas size: 2
+Replica with id 0 added for 2
+New replicas: {0=Actor[akka://replica-system/user/replica0#851195852]}
+Replica with id 0 added for 4
+Replica with id 0 added for 1
+Replica with id 0 added for 3
 Replica with id 2 added for 1
-New replicas: {0=Actor[akka://replica-system/user/replica0#241571661], 1=Actor[akka://replica-system/user/replica1#-1361327177]}
-Replica with id 2 added for 4
-Replica with id 2 added for 3
+Replica with id 1 added for 4
+Coordinator registered Replica 1
+Replica with id 1 added for 2
 Replica with id 2 added for 0
-Replica with id 4 added for 3
-Replica with id 3 added for 4
-Coordinator registered Replica 2
+Replica with id 3 added for 2
+New replicas size: 2
+Replica with id 2 added for 4
 Replica with id 3 added for 1
-New replicas size: 3
-Replica with id 3 added for 0
-New replicas: {0=Actor[akka://replica-system/user/replica0#241571661], 1=Actor[akka://replica-system/user/replica1#-1361327177], 2=Actor[akka://replica-system/user/replica2#-605700060]}
+Replica with id 1 added for 3
 Replica with id 4 added for 1
-Coordinator registered Replica 3
+Replica with id 3 added for 4
+New replicas: {0=Actor[akka://replica-system/user/replica0#851195852], 1=Actor[akka://replica-system/user/replica1#555543149]}
+Replica with id 4 added for 2
+Replica with id 3 added for 0
+Coordinator registered Replica 2
+Replica with id 2 added for 3
+New replicas size: 3
 Replica with id 4 added for 0
+New replicas: {0=Actor[akka://replica-system/user/replica0#851195852], 1=Actor[akka://replica-system/user/replica1#555543149], 2=Actor[akka://replica-system/user/replica2#352730184]}
+Replica with id 4 added for 3
+Coordinator registered Replica 3
+Replica 0 received write request with value 100
 New replicas size: 4
-New replicas: {0=Actor[akka://replica-system/user/replica0#241571661], 1=Actor[akka://replica-system/user/replica1#-1361327177], 2=Actor[akka://replica-system/user/replica2#-605700060], 3=Actor[akka://replica-system/user/replica3#-1899351206]}
-Replica 0 received write request with value 100
+New replicas: {0=Actor[akka://replica-system/user/replica0#851195852], 1=Actor[akka://replica-system/user/replica1#555543149], 2=Actor[akka://replica-system/user/replica2#352730184], 3=Actor[akka://replica-system/user/replica3#-469282630]}
 Coordinator registered Replica 4
-Replica 0 received write request with value 100
-Coordinator received write request for replica 0=Actor[akka://replica-system/user/replica0#241571661] with value: 100
+Coordinator received write request for replica 0=Actor[akka://replica-system/user/replica0#851195852] with value: 100
 Coordinator CRASH simulated!!!
 Timeout while waiting for coordinator to broadcast WRITE request at Replica 0: Coordinator crash suspected
 Replica 0 is in election state
@@ -64,9 +62,9 @@ Replica 0 has the same sequence id, but the most recent is 1
 Replica 0 has the same sequence id, but the most recent is 2
 Replica 0 has the same sequence id, but the most recent is 3
 Replica 0 has the same sequence id, but the most recent is 4
-Replica 0 is Actor[akka://replica-system/user/replica0#241571661]
-Next coordinator is Actor[akka://replica-system/user/replica4#683865926]
-Replica's replicaMap {1=Actor[akka://replica-system/user/replica1#-1361327177], 2=Actor[akka://replica-system/user/replica2#-605700060], 3=Actor[akka://replica-system/user/replica3#-1899351206], 4=Actor[akka://replica-system/user/replica4#683865926]}
+Replica 0 is Actor[akka://replica-system/user/replica0#851195852]
+Next coordinator is Actor[akka://replica-system/user/replica4#2038754972]
+Replica's replicaMap {1=Actor[akka://replica-system/user/replica1#555543149], 2=Actor[akka://replica-system/user/replica2#352730184], 3=Actor[akka://replica-system/user/replica3#-469282630], 4=Actor[akka://replica-system/user/replica4#2038754972]}
 Replica 0 is forwarding the election message
 Replica 1 received election message
 Replica 1 ring completed
@@ -76,9 +74,9 @@ Replica 1 has the same sequence id, but the most recent is 1
 Replica 1 has the same sequence id, but the most recent is 2
 Replica 1 has the same sequence id, but the most recent is 3
 Replica 1 has the same sequence id, but the most recent is 4
-Replica 1 is Actor[akka://replica-system/user/replica1#-1361327177]
-Next coordinator is Actor[akka://replica-system/user/replica4#683865926]
-Replica's replicaMap {0=Actor[akka://replica-system/user/replica0#241571661], 2=Actor[akka://replica-system/user/replica2#-605700060], 3=Actor[akka://replica-system/user/replica3#-1899351206], 4=Actor[akka://replica-system/user/replica4#683865926]}
+Replica 1 is Actor[akka://replica-system/user/replica1#555543149]
+Next coordinator is Actor[akka://replica-system/user/replica4#2038754972]
+Replica's replicaMap {0=Actor[akka://replica-system/user/replica0#851195852], 2=Actor[akka://replica-system/user/replica2#352730184], 3=Actor[akka://replica-system/user/replica3#-469282630], 4=Actor[akka://replica-system/user/replica4#2038754972]}
 Replica 1 is forwarding the election message
 Replica 2 received election message
 Replica 2 ring completed
@@ -88,9 +86,9 @@ Replica 2 has the same sequence id, but the most recent is 1
 Replica 2 has the same sequence id, but the most recent is 2
 Replica 2 has the same sequence id, but the most recent is 3
 Replica 2 has the same sequence id, but the most recent is 4
-Replica 2 is Actor[akka://replica-system/user/replica2#-605700060]
-Next coordinator is Actor[akka://replica-system/user/replica4#683865926]
-Replica's replicaMap {0=Actor[akka://replica-system/user/replica0#241571661], 1=Actor[akka://replica-system/user/replica1#-1361327177], 3=Actor[akka://replica-system/user/replica3#-1899351206], 4=Actor[akka://replica-system/user/replica4#683865926]}
+Replica 2 is Actor[akka://replica-system/user/replica2#352730184]
+Next coordinator is Actor[akka://replica-system/user/replica4#2038754972]
+Replica's replicaMap {0=Actor[akka://replica-system/user/replica0#851195852], 1=Actor[akka://replica-system/user/replica1#555543149], 3=Actor[akka://replica-system/user/replica3#-469282630], 4=Actor[akka://replica-system/user/replica4#2038754972]}
 Replica 2 is forwarding the election message
 Replica 3 received election message
 Replica 3 ring completed
@@ -100,9 +98,9 @@ Replica 3 has the same sequence id, but the most recent is 1
 Replica 3 has the same sequence id, but the most recent is 2
 Replica 3 has the same sequence id, but the most recent is 3
 Replica 3 has the same sequence id, but the most recent is 4
-Replica 3 is Actor[akka://replica-system/user/replica3#-1899351206]
-Next coordinator is Actor[akka://replica-system/user/replica4#683865926]
-Replica's replicaMap {0=Actor[akka://replica-system/user/replica0#241571661], 1=Actor[akka://replica-system/user/replica1#-1361327177], 2=Actor[akka://replica-system/user/replica2#-605700060], 4=Actor[akka://replica-system/user/replica4#683865926]}
+Replica 3 is Actor[akka://replica-system/user/replica3#-469282630]
+Next coordinator is Actor[akka://replica-system/user/replica4#2038754972]
+Replica's replicaMap {0=Actor[akka://replica-system/user/replica0#851195852], 1=Actor[akka://replica-system/user/replica1#555543149], 2=Actor[akka://replica-system/user/replica2#352730184], 4=Actor[akka://replica-system/user/replica4#2038754972]}
 Replica 3 is forwarding the election message
 Replica 4 received election message
 Replica 4 ring completed
@@ -112,49 +110,37 @@ Replica 4 has the same sequence id, but the most recent is 1
 Replica 4 has the same sequence id, but the most recent is 2
 Replica 4 has the same sequence id, but the most recent is 3
 Replica 4 has the same sequence id, but the most recent is 4
-Replica 4 is Actor[akka://replica-system/user/replica4#683865926]
+Replica 4 is Actor[akka://replica-system/user/replica4#2038754972]
 Next coordinator is null
-Replica's replicaMap {0=Actor[akka://replica-system/user/replica0#241571661], 1=Actor[akka://replica-system/user/replica1#-1361327177], 2=Actor[akka://replica-system/user/replica2#-605700060], 3=Actor[akka://replica-system/user/replica3#-1899351206]}
+Replica's replicaMap {0=Actor[akka://replica-system/user/replica0#851195852], 1=Actor[akka://replica-system/user/replica1#555543149], 2=Actor[akka://replica-system/user/replica2#352730184], 3=Actor[akka://replica-system/user/replica3#-469282630]}
 Replica 4 CRASH simulated for coordinator election!!!
 Replica 4 is the new coordinator
 Coordinator is adding 0
 Quorum size: 2
 Replica 4 sent sync message to the replica 0
-Replica 0 received the new coordinator Actor[akka://replica-system/user/coordinator1#-1040637089]
-Coordinator is adding 1
-Replica 0 received the sync message
-New replicas size: 0
 Heartbeat sent by Coordinator
-New replicas: {}
-Replica 1 received the new coordinator Actor[akka://replica-system/user/coordinator1#-1040637089]
+Replica 0 received the new coordinator Actor[akka://replica-system/user/coordinator1#29385361]
+Coordinator is adding 1
+New replicas size: 0
+Replica 1 received the new coordinator Actor[akka://replica-system/user/coordinator1#29385361]
 Replica 4 sent sync message to the replica 1
-Coordinator registered Replica 0
+Replica 0 received the sync message
 Replica 1 received the sync message
 Coordinator is adding 2
-New replicas size: 1
-Replica 2 received the new coordinator Actor[akka://replica-system/user/coordinator1#-1040637089]
+New replicas: {}
 Replica 4 sent sync message to the replica 2
-New replicas: {0=Actor[akka://replica-system/user/replica0#241571661]}
+Replica 2 received the new coordinator Actor[akka://replica-system/user/coordinator1#29385361]
+Coordinator registered Replica 0
 Replica 2 received the sync message
 Coordinator is adding 3
-Coordinator registered Replica 1
-Replica 3 received the new coordinator Actor[akka://replica-system/user/coordinator1#-1040637089]
+New replicas size: 1
+Replica 3 received the new coordinator Actor[akka://replica-system/user/coordinator1#29385361]
 Replica 4 sent sync message to the replica 3
-New replicas size: 2
+New replicas: {0=Actor[akka://replica-system/user/replica0#851195852]}
 Replica 3 received the sync message
-New replicas: {0=Actor[akka://replica-system/user/replica0#241571661], 1=Actor[akka://replica-system/user/replica1#-1361327177]}
+Coordinator registered Replica 1
+New replicas size: 2
+New replicas: {0=Actor[akka://replica-system/user/replica0#851195852], 1=Actor[akka://replica-system/user/replica1#555543149]}
 Coordinator registered Replica 2
 New replicas size: 3
-New replicas: {0=Actor[akka://replica-system/user/replica0#241571661], 1=Actor[akka://replica-system/user/replica1#-1361327177], 2=Actor[akka://replica-system/user/replica2#-605700060]}
-Coordinator registered Replica 3
-Updating coordinator epoch from 0 to 1
-Heartbeat sent by Coordinator
-Heartbeat received at Replica 3
-Heartbeat received at Replica 2
-Heartbeat received at Replica 0
-Heartbeat received at Replica 1
-Heartbeat sent by Coordinator
-Heartbeat received at Replica 3
-Heartbeat received at Replica 2
-Heartbeat received at Replica 0
-Heartbeat received at Replica 1
+New replicas: {0=Actor[akka://replica-system/user/replica0#851195852], 1=Actor[akka://replica-system/user/replica1#555543149]

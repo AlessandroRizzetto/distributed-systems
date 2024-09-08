@@ -62,8 +62,6 @@ public class Main {
         // Client that sends the requests
         client = system.actorOf(Props.create(Client.class, replicas, coordinator), "client");
 
-        client.tell(new Client.WriteRequest(replicas.get(0), 100), ActorRef.noSender());
-
         // =================================Tests================================
 
         // testReplicaCrash(replicas);
@@ -71,7 +69,7 @@ public class Main {
         // testCoordinatorCrash(coordinator);
 
         // Coordinator crash after sending WRITE from replica
-        //testCoordinatorCrashAfterWriteFromReplica(replicas, coordinator); // Update message timeout
+        // testCoordinatorCrashAfterWriteFromReplica(replicas, coordinator); // Update message timeout
 
         // Coordinator crash before sending WRITEOK -> on Coordinator set to true the
         // boolean testAckCrash
