@@ -104,10 +104,6 @@ public class Coordinator extends AbstractActor {
         Main.customPrint("Coordinator CRASH simulated!!!");
         this.isCrashed = 1;
         getContext().become(crashed());
-        // if (heartbeatSchedule != null) {
-        // heartbeatSchedule.cancel();
-        // heartbeatSchedule = null;
-        // }
     }
 
     private void onUpdateEpoch(Replica.UpdateEpoch msg) {
@@ -124,14 +120,6 @@ public class Coordinator extends AbstractActor {
                 })
                 .build();
     }
-
-    // public Receive election() {
-    // // Da vedere se deve solo igonorare i messaggi in entrata o cos'altro
-    // return receiveBuilder()
-    // .matchAny(msg -> {
-    // })
-    // .build();
-    // }
 
     public static class Heartbeat {
     }
